@@ -51,7 +51,7 @@ export async function dashboardScreen(container) {
     return invoices.filter(inv => new Date(inv.invoice_date) >= cutoff);
   }
 
-  function renderSummary(invoices) {
+  function renderSummary() {
     const totalAllTime = allInvoices.reduce((s, i) => s + i.total_amount, 0);
     const now = new Date();
     const thisMonth = allInvoices.filter(i => {
@@ -104,7 +104,7 @@ export async function dashboardScreen(container) {
     invoices.forEach(inv => {
       if (!inv.line_items_raw) return;
       inv.line_items_raw.split(',').forEach(raw => {
-        const [type,,price,qty] = raw.split(':');
+        const [type, qty, price] = raw.split(':');
         types[type] = (types[type] || 0) + (Number(price||0) * Number(qty||0));
       });
     });
@@ -163,15 +163,18 @@ export async function dashboardScreen(container) {
 
   function refresh() {
     const filtered = filterByRange(allInvoices);
-    renderSummary(filtered);
+    renderSummary();
     renderRevenue(filtered);
     renderLeadTypes(filtered);
     renderTopClients(filtered);
   }
 
-  const style = document.createElement('style');
-  style.textContent = '.range-btn.active, .period-btn.active { background: var(--gold-dim); color: var(--gold); border-color: var(--gold); }';
-  document.head.appendChild(style);
+  if (!document.getElementById('dashboard-styles')) {
+    const style = document.createElement('style');
+    style.id = 'dashboard-styles';
+    style.textContent = '.range-btn.active, .period-btn.active { background: var(--gold-dim); color: var(--gold); border-color: var(--gold); }';
+    document.head.appendChild(style);
+  }
 
   document.querySelectorAll('.range-btn').forEach(btn => {
     btn.addEventListener('click', () => {
