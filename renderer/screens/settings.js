@@ -11,7 +11,7 @@ export async function settingsScreen(container) {
       <div class="card">
         <h3 style="font-size:15px;font-weight:600;color:var(--gold);margin-bottom:18px">Invoice Save Folder</h3>
         <div style="display:flex;gap:10px;align-items:center">
-          <input class="form-input" id="saveFolder" readonly value="${settings.saveFolder || ''}" placeholder="No folder selected" style="flex:1;cursor:default">
+          <input class="form-input" id="saveFolder" readonly value="${esc(settings.saveFolder || '')}" placeholder="No folder selected" style="flex:1;cursor:default">
           <button class="btn btn-ghost" id="chooseFolderBtn">Choose Folder</button>
         </div>
       </div>
@@ -21,11 +21,11 @@ export async function settingsScreen(container) {
         <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Use a Gmail App Password. <a href="#" id="appPassHelp" style="color:var(--gold)">How to create one</a></p>
         <div class="form-group">
           <label class="form-label">Gmail Address</label>
-          <input class="form-input" id="smtpUser" type="email" placeholder="fuegoleadz@gmail.com" value="${settings.smtpUser || ''}">
+          <input class="form-input" id="smtpUser" type="email" placeholder="fuegoleadz@gmail.com" value="${esc(settings.smtpUser || '')}">
         </div>
         <div class="form-group">
           <label class="form-label">App Password</label>
-          <input class="form-input" id="smtpPass" type="password" placeholder="xxxx xxxx xxxx xxxx" value="${settings.smtpPass || ''}">
+          <input class="form-input" id="smtpPass" type="password" placeholder="xxxx xxxx xxxx xxxx" value="${esc(settings.smtpPass || '')}">
         </div>
         <div style="display:flex;gap:10px;align-items:center">
           <button class="btn btn-primary" id="saveEmailBtn">Save Email Settings</button>
@@ -38,7 +38,7 @@ export async function settingsScreen(container) {
         <h3 style="font-size:15px;font-weight:600;color:var(--gold);margin-bottom:18px">Company Email (shown on invoice)</h3>
         <div class="form-group">
           <label class="form-label">Company Email</label>
-          <input class="form-input" id="companyEmail" placeholder="info@fuegoleadz.com" value="${settings.companyEmail || ''}">
+          <input class="form-input" id="companyEmail" placeholder="info@fuegoleadz.com" value="${esc(settings.companyEmail || '')}">
         </div>
         <button class="btn btn-primary" id="saveCompanyBtn">Save</button>
       </div>
@@ -47,19 +47,19 @@ export async function settingsScreen(container) {
         <h3 style="font-size:15px;font-weight:600;color:var(--gold);margin-bottom:18px">Payment Methods (shown on invoice)</h3>
         <div class="form-group">
           <label class="form-label">Zelle</label>
-          <input class="form-input" id="paymentZelle" placeholder="Phone number or email" value="${settings.paymentZelle || ''}">
+          <input class="form-input" id="paymentZelle" placeholder="Phone number or email" value="${esc(settings.paymentZelle || '')}">
         </div>
         <div class="form-group">
           <label class="form-label">Bank Transfer</label>
-          <input class="form-input" id="paymentBank" placeholder="Bank name, Account #, Routing #" value="${settings.paymentBank || ''}">
+          <input class="form-input" id="paymentBank" placeholder="Bank name, Account #, Routing #" value="${esc(settings.paymentBank || '')}">
         </div>
         <div class="form-group">
           <label class="form-label">PayPal</label>
-          <input class="form-input" id="paymentPaypal" placeholder="PayPal email or link" value="${settings.paymentPaypal || ''}">
+          <input class="form-input" id="paymentPaypal" placeholder="PayPal email or link" value="${esc(settings.paymentPaypal || '')}">
         </div>
         <div class="form-group">
           <label class="form-label">Other</label>
-          <input class="form-input" id="paymentOther" placeholder="Venmo, Cash App, etc." value="${settings.paymentOther || ''}">
+          <input class="form-input" id="paymentOther" placeholder="Venmo, Cash App, etc." value="${esc(settings.paymentOther || '')}">
         </div>
         <button class="btn btn-primary" id="savePaymentBtn">Save Payment Methods</button>
       </div>
@@ -68,11 +68,15 @@ export async function settingsScreen(container) {
   `;
 
   document.getElementById('chooseFolderBtn').addEventListener('click', async () => {
-    const folder = await window.api.dialog.selectFolder();
-    if (folder) {
-      document.getElementById('saveFolder').value = folder;
-      await window.api.settings.set('saveFolder', folder);
-      showToast('Save folder updated.', 'success');
+    try {
+      const folder = await window.api.dialog.selectFolder();
+      if (folder) {
+        document.getElementById('saveFolder').value = folder;
+        await window.api.settings.set('saveFolder', folder);
+        showToast('Save folder updated.', 'success');
+      }
+    } catch (e) {
+      showToast('Failed to save.', 'error');
     }
   });
 
@@ -82,9 +86,13 @@ export async function settingsScreen(container) {
   });
 
   document.getElementById('saveEmailBtn').addEventListener('click', async () => {
-    await window.api.settings.set('smtpUser', document.getElementById('smtpUser').value.trim());
-    await window.api.settings.set('smtpPass', document.getElementById('smtpPass').value.trim());
-    showToast('Email settings saved.', 'success');
+    try {
+      await window.api.settings.set('smtpUser', document.getElementById('smtpUser').value.trim());
+      await window.api.settings.set('smtpPass', document.getElementById('smtpPass').value.trim());
+      showToast('Email settings saved.', 'success');
+    } catch (e) {
+      showToast('Failed to save.', 'error');
+    }
   });
 
   document.getElementById('testEmailBtn').addEventListener('click', async () => {
@@ -105,16 +113,24 @@ export async function settingsScreen(container) {
   });
 
   document.getElementById('saveCompanyBtn').addEventListener('click', async () => {
-    await window.api.settings.set('companyEmail', document.getElementById('companyEmail').value.trim());
-    showToast('Saved.', 'success');
+    try {
+      await window.api.settings.set('companyEmail', document.getElementById('companyEmail').value.trim());
+      showToast('Saved.', 'success');
+    } catch (e) {
+      showToast('Failed to save.', 'error');
+    }
   });
 
   document.getElementById('savePaymentBtn').addEventListener('click', async () => {
-    await window.api.settings.set('paymentZelle', document.getElementById('paymentZelle').value.trim());
-    await window.api.settings.set('paymentBank', document.getElementById('paymentBank').value.trim());
-    await window.api.settings.set('paymentPaypal', document.getElementById('paymentPaypal').value.trim());
-    await window.api.settings.set('paymentOther', document.getElementById('paymentOther').value.trim());
-    showToast('Payment methods saved.', 'success');
+    try {
+      await window.api.settings.set('paymentZelle', document.getElementById('paymentZelle').value.trim());
+      await window.api.settings.set('paymentBank', document.getElementById('paymentBank').value.trim());
+      await window.api.settings.set('paymentPaypal', document.getElementById('paymentPaypal').value.trim());
+      await window.api.settings.set('paymentOther', document.getElementById('paymentOther').value.trim());
+      showToast('Payment methods saved.', 'success');
+    } catch (e) {
+      showToast('Failed to save.', 'error');
+    }
   });
 }
 
@@ -124,4 +140,8 @@ function showToast(message, type = 'success') {
   t.textContent = message;
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 3000);
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
