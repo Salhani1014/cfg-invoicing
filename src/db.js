@@ -154,7 +154,7 @@ function getInvoices(clientId) {
 function getAllInvoices() {
   return getDb().prepare(`
     SELECT i.*, c.first_name, c.last_name, c.email,
-      GROUP_CONCAT(li.lead_type || ':' || li.quantity || ':' || li.unit_price || ':' || COALESCE(li.guaranteed_minimum,'')) as line_items_raw
+      GROUP_CONCAT(li.lead_type || char(31) || li.quantity || char(31) || li.unit_price || char(31) || COALESCE(li.guaranteed_minimum,'')) as line_items_raw
     FROM invoices i
     JOIN clients c ON c.id = i.client_id
     LEFT JOIN invoice_line_items li ON li.invoice_id = i.id

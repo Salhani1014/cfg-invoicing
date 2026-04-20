@@ -15,7 +15,7 @@ function parseLeadTypes(raw) {
 
 function getRawLeadTypes(raw) {
   if (!raw) return [];
-  return raw.split(',').map(r => r.split(':')[0]);
+  return raw.split(',').map(r => r.split('\x1f')[0]);
 }
 
 function formatDate(d) {
