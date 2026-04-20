@@ -51,3 +51,21 @@ ipcMain.handle('dialog:selectFolder', async () => {
   return result.canceled ? null : result.filePaths[0];
 });
 ipcMain.handle('shell:openPath', (_, p) => shell.openPath(p));
+
+const { generateInvoicePDF } = require('./src/pdf-generator');
+const { sendInvoiceEmail } = require('./src/mailer');
+
+ipcMain.handle('pdf:generate', async (_, data) => {
+  const result = await generateInvoicePDF(data);
+  if (data.sendEmail) {
+    await sendInvoiceEmail(result);
+    db.markInvoiceEmailed(result.invoiceId);
+  }
+  return { success: true, pdfPath: result.pdfPath, invoiceNumber: result.invoiceNumber };
+});
+
+ipcMain.handle('mail:testConnection', async (_, config) => {
+  const { testConnection } = require('./src/mailer');
+  await testConnection(config);
+  return { success: true };
+});
