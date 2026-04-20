@@ -57,6 +57,15 @@ function migrate(db) {
 
     CREATE INDEX IF NOT EXISTS idx_invoices_client_id ON invoices(client_id);
   `);
+
+  // Safe column additions — no-op if already present
+  const cols = db.prepare('PRAGMA table_info(invoices)').all().map(c => c.name);
+  if (!cols.includes('paid'))              db.exec('ALTER TABLE invoices ADD COLUMN paid INTEGER NOT NULL DEFAULT 0');
+  if (!cols.includes('paid_at'))           db.exec('ALTER TABLE invoices ADD COLUMN paid_at TEXT');
+  if (!cols.includes('payment_method'))    db.exec('ALTER TABLE invoices ADD COLUMN payment_method TEXT');
+  if (!cols.includes('reminder_sent_at'))  db.exec('ALTER TABLE invoices ADD COLUMN reminder_sent_at TEXT');
+  if (!cols.includes('notes'))             db.exec('ALTER TABLE invoices ADD COLUMN notes TEXT');
+  if (!cols.includes('invoice_type'))      db.exec("ALTER TABLE invoices ADD COLUMN invoice_type TEXT NOT NULL DEFAULT 'lead'");
 }
 
 // Clients
@@ -64,7 +73,9 @@ function getClients() {
   return getDb().prepare(`
     SELECT c.*,
       (SELECT invoice_date FROM invoices WHERE client_id = c.id ORDER BY invoice_date DESC LIMIT 1) as last_invoice_date,
-      (SELECT total_amount FROM invoices WHERE client_id = c.id ORDER BY invoice_date DESC LIMIT 1) as last_invoice_amount
+      (SELECT total_amount FROM invoices WHERE client_id = c.id ORDER BY invoice_date DESC LIMIT 1) as last_invoice_amount,
+      (SELECT COUNT(*) FROM invoices WHERE client_id = c.id AND paid=0 AND julianday('now') - julianday(invoice_date) >= 7) as overdue_count,
+      COALESCE((SELECT SUM(total_amount) FROM invoices WHERE client_id = c.id AND paid=0), 0) as total_unpaid
     FROM clients c
     ORDER BY c.last_name, c.first_name
   `).all();
@@ -100,14 +111,17 @@ function deleteClient(id) {
 function createInvoice(data) {
   const db = getDb();
   const insertInvoice = db.prepare(
-    'INSERT INTO invoices (client_id, invoice_number, invoice_date, total_amount) VALUES (?, ?, ?, ?)'
+    'INSERT INTO invoices (client_id, invoice_number, invoice_date, total_amount, payment_method, invoice_type) VALUES (?, ?, ?, ?, ?, ?)'
   );
   const insertLineItem = db.prepare(
     'INSERT INTO invoice_line_items (invoice_id, lead_type, quantity, unit_price, guaranteed_minimum) VALUES (?, ?, ?, ?, ?)'
   );
 
   const invoiceId = db.transaction(() => {
-    const result = insertInvoice.run(data.clientId, data.invoiceNumber, data.invoiceDate, data.totalAmount);
+    const result = insertInvoice.run(
+      data.clientId, data.invoiceNumber, data.invoiceDate, data.totalAmount,
+      data.paymentMethod || null, data.invoiceType || 'lead'
+    );
     const invoiceId = result.lastInsertRowid;
     for (const item of data.lineItems) {
       insertLineItem.run(invoiceId, item.leadType, item.quantity, item.unitPrice, item.guaranteedMinimum || null);
@@ -156,6 +170,78 @@ function getNextInvoiceSeq(clientId) {
   return row.cnt + 1;
 }
 
+function getLastClientInvoice(clientId) {
+  const invoice = getDb().prepare(
+    'SELECT * FROM invoices WHERE client_id=? ORDER BY invoice_date DESC LIMIT 1'
+  ).get(clientId);
+  if (!invoice) return null;
+  const lineItems = getDb().prepare(
+    'SELECT lead_type, quantity, unit_price, guaranteed_minimum FROM invoice_line_items WHERE invoice_id=?'
+  ).all(invoice.id);
+  return {
+    ...invoice,
+    lineItems: lineItems.map(li => ({
+      leadType: li.lead_type,
+      quantity: li.quantity,
+      unitPrice: li.unit_price,
+      guaranteedMinimum: li.guaranteed_minimum
+    }))
+  };
+}
+
+function markReminderSent(id) {
+  getDb().prepare("UPDATE invoices SET reminder_sent_at=datetime('now') WHERE id=?").run(id);
+}
+
+function updateInvoiceNotes(id, notes) {
+  getDb().prepare('UPDATE invoices SET notes=? WHERE id=?').run(notes || null, id);
+}
+
+function getOverdueInvoices(days = 7) {
+  return getDb().prepare(`
+    SELECT i.*, c.first_name, c.last_name, c.email, c.phone
+    FROM invoices i
+    JOIN clients c ON c.id = i.client_id
+    WHERE i.paid = 0
+      AND i.reminder_sent_at IS NULL
+      AND julianday('now') - julianday(i.invoice_date) >= ?
+  `).all(days);
+}
+
+function markInvoicePaid(id) {
+  getDb().prepare("UPDATE invoices SET paid=1, paid_at=datetime('now') WHERE id=?").run(id);
+}
+
+function deleteInvoice(id) {
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare('DELETE FROM invoice_line_items WHERE invoice_id=?').run(id);
+    db.prepare('DELETE FROM invoices WHERE id=?').run(id);
+  })();
+}
+
+function getInvoiceById(id) {
+  const invoice = getDb().prepare(`
+    SELECT i.*, c.first_name, c.last_name, c.email, c.phone
+    FROM invoices i
+    JOIN clients c ON c.id = i.client_id
+    WHERE i.id = ?
+  `).get(id);
+  if (!invoice) return null;
+  const lineItems = getDb().prepare(
+    'SELECT lead_type, quantity, unit_price, guaranteed_minimum FROM invoice_line_items WHERE invoice_id=?'
+  ).all(id);
+  return {
+    ...invoice,
+    lineItems: lineItems.map(li => ({
+      leadType: li.lead_type,
+      quantity: li.quantity,
+      unitPrice: li.unit_price,
+      guaranteedMinimum: li.guaranteed_minimum
+    }))
+  };
+}
+
 // Settings
 function getSetting(key) {
   const row = getDb().prepare('SELECT value FROM settings WHERE key=?').get(key);
@@ -182,7 +268,10 @@ function closeDb() {
 
 module.exports = {
   getClients, addClient, updateClient, deleteClient,
-  createInvoice, updateInvoicePdfPath, markInvoiceEmailed, getInvoices, getAllInvoices, getNextInvoiceSeq,
+  createInvoice, updateInvoicePdfPath, markInvoiceEmailed,
+  markInvoicePaid, deleteInvoice, getInvoiceById,
+  getLastClientInvoice, markReminderSent, updateInvoiceNotes, getOverdueInvoices,
+  getInvoices, getAllInvoices, getNextInvoiceSeq,
   getSetting, setSetting, getAllSettings,
   closeDb,
   _getDb: getDb
