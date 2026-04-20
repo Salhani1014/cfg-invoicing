@@ -1,22 +1,42 @@
 const { generateInvoiceNumber } = require('../src/invoice-number');
 
-test('generates correct format with last name + first initial', () => {
-  const num = generateInvoiceNumber('Smith', 'John', '2026-04-19', 1);
-  expect(num).toBe('INV-2026-0419-SMITJ-001');
+const FORMAT = /^INV-\d{4}-\d{4}-[A-Z0-9]{4}[A-Z0-9]-\d{6}$/;
+
+test('generates correct format', () => {
+  const num = generateInvoiceNumber('Smith', 'John', '2026-04-19');
+  expect(num).toMatch(FORMAT);
 });
 
-test('pads sequence to 3 digits', () => {
-  expect(generateInvoiceNumber('Doe', 'Jane', '2026-04-19', 12)).toBe('INV-2026-0419-DOE0J-012');
+test('encodes last name (up to 4 chars) and first initial', () => {
+  const num = generateInvoiceNumber('Smith', 'John', '2026-04-19');
+  expect(num).toContain('SMITJ');
 });
 
-test('handles last name shorter than 4 chars', () => {
-  expect(generateInvoiceNumber('Li', 'Bob', '2026-04-19', 1)).toBe('INV-2026-0419-LI00B-001');
+test('handles last name shorter than 4 chars with padding', () => {
+  const num = generateInvoiceNumber('Li', 'Bob', '2026-04-19');
+  expect(num).toContain('LI00B');
 });
 
-test('strips special characters', () => {
-  expect(generateInvoiceNumber("O'Brien", 'Mike', '2026-04-19', 1)).toBe('INV-2026-0419-OBRIM-001');
+test('strips special characters from name', () => {
+  const num = generateInvoiceNumber("O'Brien", 'Mike', '2026-04-19');
+  expect(num).toContain('OBRIM');
 });
 
 test('handles single-character last name', () => {
-  expect(generateInvoiceNumber('A', 'Bob', '2026-04-19', 1)).toBe('INV-2026-0419-A000B-001');
+  const num = generateInvoiceNumber('A', 'Bob', '2026-04-19');
+  expect(num).toContain('A000B');
+});
+
+test('random suffix is 6 digits between 100000 and 999999', () => {
+  const num = generateInvoiceNumber('Smith', 'John', '2026-04-19');
+  const rand = Number(num.split('-').pop());
+  expect(rand).toBeGreaterThanOrEqual(100000);
+  expect(rand).toBeLessThanOrEqual(999999);
+});
+
+test('generates unique numbers on repeated calls', () => {
+  const nums = new Set(
+    Array.from({ length: 20 }, () => generateInvoiceNumber('Smith', 'John', '2026-04-19'))
+  );
+  expect(nums.size).toBeGreaterThan(1);
 });
