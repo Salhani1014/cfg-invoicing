@@ -9,7 +9,9 @@
 
     /* Header */
     .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; padding-bottom: 28px; border-bottom: 3px solid #c9a84c; }
-    .company-name { font-size: 28px; font-weight: 800; letter-spacing: 3px; color: #111; }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .company-logo { width: 72px; height: 72px; object-fit: contain; }
+    .company-name { font-size: 22px; font-weight: 800; letter-spacing: 1.5px; color: #111; }
     .company-name span { color: #c9a84c; }
     .company-info { font-size: 11px; color: #555; line-height: 1.7; margin-top: 4px; }
     .invoice-meta { text-align: right; }
@@ -25,6 +27,9 @@
     .due-box { background: #0a0a0a; color: #fff; padding: 16px 24px; border-radius: 8px; text-align: center; }
     .due-box .due-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #aaa; margin-bottom: 4px; }
     .due-box .due-value { font-size: 15px; font-weight: 700; color: #c9a84c; }
+    .due-box-paid { background: #2f9e44; color: #fff; padding: 16px 24px; border-radius: 8px; text-align: center; }
+    .due-box-paid .due-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.8); margin-bottom: 4px; }
+    .due-box-paid .due-value { font-size: 15px; font-weight: 700; color: #fff; }
 
     /* Table */
     .items-table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
@@ -41,9 +46,8 @@
     /* Payment */
     .payment-section { margin-top: 36px; padding: 20px; background: #fafafa; border-radius: 8px; border: 1px solid #eee; }
     .payment-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #c9a84c; margin-bottom: 14px; }
-    .payment-methods { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; }
-    .payment-method { display: flex; gap: 8px; font-size: 12px; align-items: flex-start; }
-    .pm-label { font-weight: 600; color: #111; min-width: 100px; }
+    .payment-method { display: flex; gap: 8px; font-size: 13px; align-items: flex-start; }
+    .pm-label { font-weight: 600; color: #111; min-width: 120px; }
     .pm-value { color: #555; }
 
     /* Footer */
@@ -72,36 +76,54 @@
     }
 
     function renderInvoice(data) {
-      const hasGmin = data.lineItems.some(i => i.guaranteedMinimum != null);
-
       const rows = data.lineItems.map(item => `
         <tr>
-          <td>${item.leadType}${item.guaranteedMinimum != null ? `<span class="gmin-badge">Min: ${item.guaranteedMinimum}</span>` : ''}</td>
-          <td>${item.quantity}</td>
-          ${hasGmin ? `<td>${item.guaranteedMinimum != null ? item.guaranteedMinimum : '—'}</td>` : ''}
+          <td>${item.leadType}${item.guaranteedMinimum != null ? `<span class="gmin-badge">Guaranteed Min: ${item.guaranteedMinimum}</span>` : ''}</td>
           <td>${fmt(item.unitPrice)}</td>
-          <td>${fmt(item.quantity * item.unitPrice)}</td>
         </tr>
       `).join('');
 
       const settings = data.settings || {};
 
+      const pmLabels = { paymentZelle: 'Zelle', paymentBank: 'Bank Transfer', paymentOther: 'Other' };
+      const pmKey = data.paymentMethod || 'paymentZelle';
+      const pmLabel = pmLabels[pmKey] || 'Payment';
+      const pmValue = settings[pmKey] || '[Contact for details]';
+
+      const dueBoxHtml = data.paid
+        ? `<div class="due-box-paid">
+             <div class="due-label">Status</div>
+             <div class="due-value">PAID ✓</div>
+           </div>`
+        : `<div class="due-box">
+             <div class="due-label">Payment Due</div>
+             <div class="due-value">Upon Receipt</div>
+           </div>`;
+
+      const footerNote = data.paid
+        ? 'Payment received — thank you! · Checkmate Financial Group LLC · Florida LLC · L26000014292'
+        : 'All sales are final. · Checkmate Financial Group LLC · Florida LLC · L26000014292';
+
+      const lineItemHeader = data.invoiceType === 'custom' ? 'Description' : 'Lead Type';
+
       document.getElementById('invoicePage').innerHTML = `
         <div class="header">
-          <div>
-            <div class="company-name">FUEGO <span>LEADZ</span> LLC</div>
-            <div class="company-info">
-              5728 Major Blvd, Suite 702<br>
-              Orlando, FL 32819<br>
-              ${settings.companyEmail || ''}
+          <div class="header-left">
+            ${data.logoBase64 ? `<img src="${data.logoBase64}" class="company-logo" alt="CFG Logo">` : ''}
+            <div>
+              <div class="company-name">CHECKMATE <span>FINANCIAL GROUP</span> LLC</div>
+              <div class="company-info">
+                5728 Major Blvd STE 702, Orlando FL 32819<br>
+                Doc# L26000014292<br>
+                ${settings.companyEmail || 'obada@checkmatefinancialgroup.com'}
+              </div>
             </div>
           </div>
           <div class="invoice-meta">
             <div class="invoice-label">INVOICE</div>
             <div class="invoice-detail">
               <strong>Invoice #:</strong> ${data.invoiceNumber}<br>
-              <strong>Date:</strong> ${fmtDate(data.date)}<br>
-              <strong>EIN:</strong> Applied For
+              <strong>Date:</strong> ${fmtDate(data.date)}
             </div>
           </div>
         </div>
@@ -115,56 +137,36 @@
               ${data.client.phone}
             </div>
           </div>
-          <div class="due-box">
-            <div class="due-label">Payment Due</div>
-            <div class="due-value">Upon Receipt</div>
-          </div>
+          ${dueBoxHtml}
         </div>
 
         <table class="items-table">
           <thead>
             <tr>
-              <th>Lead Type</th>
-              <th>Qty</th>
-              ${hasGmin ? '<th>Guar. Min</th>' : ''}
-              <th>Unit Price</th>
-              <th>Total</th>
+              <th>${lineItemHeader}</th>
+              <th style="text-align:right">Amount</th>
             </tr>
           </thead>
           <tbody>
             ${rows}
             <tr class="total-row">
-              <td colspan="${hasGmin ? 4 : 3}" style="text-align:right;color:#555;font-size:13px">TOTAL DUE</td>
+              <td style="text-align:right;color:#555;font-size:13px">TOTAL DUE</td>
               <td style="color:#c9a84c;font-size:17px">${fmt(data.totalAmount)}</td>
             </tr>
           </tbody>
         </table>
 
         <div class="payment-section">
-          <div class="payment-title">Payment Methods</div>
-          <div class="payment-methods">
-            <div class="payment-method">
-              <span class="pm-label">Zelle:</span>
-              <span class="pm-value">${settings.paymentZelle || '[Contact for details]'}</span>
-            </div>
-            <div class="payment-method">
-              <span class="pm-label">Bank Transfer:</span>
-              <span class="pm-value">${settings.paymentBank || '[Contact for details]'}</span>
-            </div>
-            <div class="payment-method">
-              <span class="pm-label">PayPal:</span>
-              <span class="pm-value">${settings.paymentPaypal || '[Contact for details]'}</span>
-            </div>
-            <div class="payment-method">
-              <span class="pm-label">Other:</span>
-              <span class="pm-value">${settings.paymentOther || '[Contact for details]'}</span>
-            </div>
+          <div class="payment-title">Payment Method</div>
+          <div class="payment-method">
+            <span class="pm-label">${pmLabel}:</span>
+            <span class="pm-value">${pmValue}</span>
           </div>
         </div>
 
         <div class="footer">
           <div class="thank-you">Thank you for your business!</div>
-          <div class="footer-note">Fuego Leadz LLC · Florida LLC · L26000085126</div>
+          <div class="footer-note">${footerNote}</div>
         </div>
       `;
     }
