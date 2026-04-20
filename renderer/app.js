@@ -5,6 +5,7 @@ const screenLoaders = {
 };
 
 async function navigate(screenName) {
+  if (!screenName) return;
   document.querySelectorAll('.nav-link').forEach(l => {
     l.classList.toggle('active', l.dataset.screen === screenName);
   });
