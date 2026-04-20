@@ -9,6 +9,7 @@ beforeAll(() => fs.mkdirSync(testDataDir, { recursive: true }));
 afterAll(() => fs.rmSync(testDataDir, { recursive: true, force: true }));
 
 beforeEach(() => {
+  try { require('../src/db').closeDb(); } catch (_) {}
   jest.resetModules();
   fs.rmSync(path.join(testDataDir, 'fuego-leadz.db'), { force: true });
 });

@@ -1,13 +1,20 @@
 const Database = require('better-sqlite3');
 const path = require('path');
-const { app } = require('electron');
 
 let db;
 
 function getDb() {
   if (db) return db;
-  const userDataPath = app ? app.getPath('userData') : path.join(__dirname, '..', 'test-data');
+  let userDataPath;
+  try {
+    const { app } = require('electron');
+    userDataPath = app ? app.getPath('userData') : null;
+  } catch (_) {
+    userDataPath = null;
+  }
+  userDataPath = userDataPath || path.join(__dirname, '..', 'test-data');
   db = new Database(path.join(userDataPath, 'fuego-leadz.db'));
+  db.pragma('foreign_keys = ON');
   migrate(db);
   return db;
 }
@@ -47,6 +54,8 @@ function migrate(db) {
       key TEXT PRIMARY KEY,
       value TEXT
     );
+
+    CREATE INDEX IF NOT EXISTS idx_invoices_client_id ON invoices(client_id);
   `);
 }
 
@@ -76,7 +85,15 @@ function updateClient(id, data) {
 }
 
 function deleteClient(id) {
-  getDb().prepare('DELETE FROM clients WHERE id=?').run(id);
+  const db = getDb();
+  db.transaction(() => {
+    const invoiceIds = db.prepare('SELECT id FROM invoices WHERE client_id=?').all(id).map(r => r.id);
+    for (const invoiceId of invoiceIds) {
+      db.prepare('DELETE FROM invoice_line_items WHERE invoice_id=?').run(invoiceId);
+    }
+    db.prepare('DELETE FROM invoices WHERE client_id=?').run(id);
+    db.prepare('DELETE FROM clients WHERE id=?').run(id);
+  })();
 }
 
 // Invoices
@@ -153,12 +170,20 @@ function setSetting(key, value) {
 
 function getAllSettings() {
   return getDb().prepare('SELECT key, value FROM settings').all()
-    .reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
+    .reduce((acc, row) => { acc[row.key] = row.value; return acc; }, {});
+}
+
+function closeDb() {
+  if (db) {
+    db.close();
+    db = null;
+  }
 }
 
 module.exports = {
   getClients, addClient, updateClient, deleteClient,
   createInvoice, updateInvoicePdfPath, markInvoiceEmailed, getInvoices, getAllInvoices, getNextInvoiceSeq,
   getSetting, setSetting, getAllSettings,
+  closeDb,
   _getDb: getDb
 };
