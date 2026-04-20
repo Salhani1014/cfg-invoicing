@@ -207,7 +207,7 @@ export async function invoicesScreen(container) {
       ? `<span class="badge badge-green">Paid</span><div style="font-size:11px;color:var(--text-muted);margin-top:3px">${formatDate(inv.paid_at)}</div>`
       : `<span class="badge badge-red">Unpaid</span>${hasReminder ? `<div style="font-size:10px;color:var(--text-muted);margin-top:3px">Reminded ${formatDate(inv.reminder_sent_at)}</div>` : ''}`;
 
-    const noteBtn = `<button class="btn btn-ghost btn-sm" data-action="note" data-id="${inv.id}" title="${hasNote ? esc(inv.notes) : 'Add note'}" style="${hasNote ? 'color:var(--gold)' : ''}">📝</button>`;
+    const noteBtn = `<button class="btn btn-ghost btn-sm" data-action="note" data-id="${inv.id}" title="${hasNote ? esc(inv.notes).replace(/[\r\n]+/g, ' ') : 'Add note'}" style="${hasNote ? 'color:var(--gold)' : ''}">📝</button>`;
 
     const actions = isPaid
       ? `<button class="btn btn-ghost btn-sm" data-action="resendReceipt" data-id="${inv.id}">Resend Receipt</button>
