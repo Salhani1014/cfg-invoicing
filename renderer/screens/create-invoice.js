@@ -157,10 +157,6 @@ export async function createInvoiceScreen(container, params = {}) {
     wireLead();
     wireCustom();
 
-    container.querySelectorAll('.amount-input, .custom-amount').forEach(inp => {
-      inp.addEventListener('input', updateTotal);
-    });
-
     container.querySelectorAll('input[name=paymentMethod]').forEach((radio, i) => {
       radio.addEventListener('change', () => {
         container.querySelectorAll('.pm-option').forEach((opt, j) => {
@@ -207,25 +203,28 @@ export async function createInvoiceScreen(container, params = {}) {
     const addBtn = container.querySelector('#addLineItemBtn');
     if (!addBtn) return;
 
-    addBtn.addEventListener('click', () => {
+    addBtn.onclick = () => {
       const wrapper = container.querySelector('#customLineItems');
       const div = document.createElement('div');
       div.innerHTML = renderCustomRow(customRowCount++);
       wrapper.appendChild(div.firstElementChild);
       wireRemoveButtons();
       container.querySelectorAll('.custom-amount').forEach(inp => inp.addEventListener('input', updateTotal));
-    });
+    };
 
     wireRemoveButtons();
     container.querySelectorAll('.custom-amount').forEach(inp => inp.addEventListener('input', updateTotal));
   }
 
   function wireRemoveButtons() {
+    const rows = container.querySelectorAll('.custom-row');
     container.querySelectorAll('.remove-row-btn').forEach(btn => {
+      btn.disabled = rows.length <= 1;
       btn.onclick = () => {
-        const rows = container.querySelectorAll('.custom-row');
-        if (rows.length <= 1) return;
+        const current = container.querySelectorAll('.custom-row');
+        if (current.length <= 1) return;
         btn.closest('.custom-row').remove();
+        wireRemoveButtons();
         updateTotal();
       };
     });
@@ -304,7 +303,7 @@ export async function createInvoiceScreen(container, params = {}) {
       const wrapper = container.querySelector('#customLineItems');
       wrapper.innerHTML = '';
       customRowCount = 0;
-      invoice.lineItems.forEach((item, idx) => {
+      invoice.lineItems.forEach(item => {
         const div = document.createElement('div');
         div.innerHTML = renderCustomRow(customRowCount++);
         const row = div.firstElementChild;
@@ -318,6 +317,7 @@ export async function createInvoiceScreen(container, params = {}) {
         wrapper.appendChild(div.firstElementChild);
       }
       wireRemoveButtons();
+      container.querySelectorAll('.custom-amount').forEach(inp => inp.addEventListener('input', updateTotal));
     }
 
     if (invoice.payment_method) {
