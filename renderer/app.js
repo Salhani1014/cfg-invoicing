@@ -17,6 +17,7 @@ async function navigate(screenName, params = {}) {
     const screenFn = await loader();
     await screenFn(container, params);
   } catch (err) {
+    console.error(`[navigate] failed to load screen "${screenName}":`, err);
     container.innerHTML = `<div class="empty-state"><h3>${screenName}</h3><p>Screen coming soon.</p></div>`;
   }
 }

@@ -23,7 +23,7 @@ export async function createInvoiceScreen(container, params = {}) {
             <label class="form-label">Client</label>
             <select class="form-select" id="clientSelect">
               <option value="">Select a client...</option>
-              ${clients.map(c => `<option value="${c.id}" ${c.id === params.clientId ? 'selected' : ''}>${c.first_name} ${c.last_name}</option>`).join('')}
+              ${clients.map(c => `<option value="${c.id}" ${c.id === params.clientId ? 'selected' : ''}>${esc(c.first_name)} ${esc(c.last_name)}</option>`).join('')}
             </select>
           </div>
           <div class="form-group">
@@ -127,7 +127,7 @@ export async function createInvoiceScreen(container, params = {}) {
     const client = clients.find(c => c.id === clientId);
     if (!client) return;
     const datePart = date.replace(/-/g, '');
-    document.getElementById('invoiceNumPreview').textContent = `INV-${datePart.slice(0,4)}-${datePart.slice(4,8)}-${client.last_name.toUpperCase().replace(/[^A-Z0-9]/g,'').padEnd(4,'0').slice(0,4)}${client.first_name[0].toUpperCase()}-???`;
+    document.getElementById('invoiceNumPreview').textContent = `INV-${datePart.slice(0,4)}-${datePart.slice(4,8)}-${client.last_name.toUpperCase().replace(/[^A-Z0-9]/g,'').padEnd(4,'0').slice(0,4)}${(client.first_name?.[0] ?? '').toUpperCase()}-???`;
   }
 
   async function generate(sendEmail) {
@@ -151,9 +151,11 @@ export async function createInvoiceScreen(container, params = {}) {
     const date = document.getElementById('invoiceDate').value;
     const totalAmount = lineItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
 
-    document.getElementById('generateSendBtn').disabled = true;
-    document.getElementById('generateOnlyBtn').disabled = true;
-    document.getElementById('generateSendBtn').textContent = 'Generating...';
+    const sendBtn = document.getElementById('generateSendBtn');
+    const onlyBtn = document.getElementById('generateOnlyBtn');
+    sendBtn.disabled = true;
+    onlyBtn.disabled = true;
+    sendBtn.textContent = 'Generating...';
 
     try {
       await window.api.pdf.generate({
@@ -164,9 +166,10 @@ export async function createInvoiceScreen(container, params = {}) {
     } catch (e) {
       err.textContent = e.message || 'Failed to generate invoice.';
       err.style.display = 'block';
-      document.getElementById('generateSendBtn').disabled = false;
-      document.getElementById('generateOnlyBtn').disabled = false;
-      document.getElementById('generateSendBtn').textContent = 'Generate & Send Email';
+    } finally {
+      sendBtn.disabled = false;
+      onlyBtn.disabled = false;
+      sendBtn.textContent = 'Generate & Send Email';
     }
   }
 
@@ -174,6 +177,10 @@ export async function createInvoiceScreen(container, params = {}) {
   document.getElementById('generateOnlyBtn').addEventListener('click', () => generate(false));
 
   updatePreview();
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function showToast(message, type = 'success') {

@@ -47,8 +47,10 @@ export async function clientsScreen(container) {
 
   function getStatus(lastInvoiceDate) {
     if (!lastInvoiceDate) return { label: 'Overdue', cls: 'badge-red' };
-    const days = Math.floor((Date.now() - new Date(lastInvoiceDate)) / 86400000);
-    if (days < 6) return { label: 'Up to Date', cls: 'badge-green' };
+    const last = new Date(lastInvoiceDate); last.setHours(0, 0, 0, 0);
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const days = Math.round((now - last) / 86400000);
+    if (days < 6)  return { label: 'Up to Date', cls: 'badge-green' };
     if (days === 6) return { label: 'Due Soon', cls: 'badge-yellow' };
     return { label: 'Overdue', cls: 'badge-red' };
   }
@@ -73,15 +75,15 @@ export async function clientsScreen(container) {
       const status = getStatus(c.last_invoice_date);
       return `
         <tr>
-          <td><strong>${c.first_name} ${c.last_name}</strong></td>
-          <td style="color:var(--text-muted)">${c.email}</td>
-          <td style="color:var(--text-muted)">${c.phone}</td>
+          <td><strong>${esc(c.first_name)} ${esc(c.last_name)}</strong></td>
+          <td style="color:var(--text-muted)">${esc(c.email)}</td>
+          <td style="color:var(--text-muted)">${esc(c.phone)}</td>
           <td style="color:var(--text-muted)">${formatDate(c.last_invoice_date)}</td>
           <td>${formatAmount(c.last_invoice_amount)}</td>
           <td><span class="badge ${status.cls}">${status.label}</span></td>
           <td>
             <div style="display:flex;gap:6px;justify-content:flex-end">
-              <button class="btn btn-primary btn-sm" data-action="invoice" data-id="${c.id}" data-name="${c.first_name} ${c.last_name}">New Invoice</button>
+              <button class="btn btn-primary btn-sm" data-action="invoice" data-id="${c.id}" data-name="${esc(c.first_name)} ${esc(c.last_name)}">New Invoice</button>
               <button class="btn btn-ghost btn-sm" data-action="edit" data-id="${c.id}">Edit</button>
             </div>
           </td>
@@ -117,20 +119,20 @@ function openClientModal(existing, onSave) {
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">First Name</label>
-          <input class="form-input" id="mFirstName" value="${isEdit ? existing.first_name : ''}">
+          <input class="form-input" id="mFirstName" value="${isEdit ? esc(existing.first_name) : ''}">
         </div>
         <div class="form-group">
           <label class="form-label">Last Name</label>
-          <input class="form-input" id="mLastName" value="${isEdit ? existing.last_name : ''}">
+          <input class="form-input" id="mLastName" value="${isEdit ? esc(existing.last_name) : ''}">
         </div>
       </div>
       <div class="form-group">
         <label class="form-label">Email</label>
-        <input class="form-input" id="mEmail" type="email" value="${isEdit ? existing.email : ''}">
+        <input class="form-input" id="mEmail" type="email" value="${isEdit ? esc(existing.email) : ''}">
       </div>
       <div class="form-group">
         <label class="form-label">Phone</label>
-        <input class="form-input" id="mPhone" value="${isEdit ? existing.phone : ''}">
+        <input class="form-input" id="mPhone" value="${isEdit ? esc(existing.phone) : ''}">
       </div>
       <div id="formError" style="color:var(--red);font-size:13px;margin-top:-8px;margin-bottom:8px;display:none"></div>
       <div class="modal-actions">
@@ -166,6 +168,10 @@ function openClientModal(existing, onSave) {
     await onSave();
     showToast(isEdit ? 'Client updated.' : 'Client added.', 'success');
   });
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function showToast(message, type = 'success') {
