@@ -2,21 +2,20 @@ const nodemailer = require('nodemailer');
 const fs = require('fs');
 const db = require('./db');
 
-function getTransport() {
-  const settings = db.getAllSettings();
-  if (!settings.smtpUser || !settings.smtpPass) {
-    throw new Error('Email not configured. Please set up SMTP in Settings.');
-  }
+function makeTransport(smtpUser, smtpPass) {
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 587,
     secure: false,
-    auth: { user: settings.smtpUser, pass: settings.smtpPass }
+    auth: { user: smtpUser, pass: smtpPass }
   });
 }
 
 async function sendInvoiceEmail({ client, invoiceNumber, pdfPath, settings }) {
-  const transport = getTransport();
+  if (!settings.smtpUser || !settings.smtpPass) {
+    throw new Error('Email not configured. Please set up SMTP in Settings.');
+  }
+  const transport = makeTransport(settings.smtpUser, settings.smtpPass);
   const fromEmail = settings.smtpUser;
 
   await transport.sendMail({
@@ -40,18 +39,13 @@ async function sendInvoiceEmail({ client, invoiceNumber, pdfPath, settings }) {
     `,
     attachments: [{
       filename: `${invoiceNumber}.pdf`,
-      content: fs.readFileSync(pdfPath)
+      content: await fs.promises.readFile(pdfPath)
     }]
   });
 }
 
 async function testConnection(config) {
-  const transport = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
-    auth: { user: config.smtpUser, pass: config.smtpPass }
-  });
+  const transport = makeTransport(config.smtpUser, config.smtpPass);
   await transport.verify();
 }
 

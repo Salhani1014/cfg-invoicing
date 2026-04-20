@@ -53,7 +53,7 @@ ipcMain.handle('dialog:selectFolder', async () => {
 ipcMain.handle('shell:openPath', (_, p) => shell.openPath(p));
 
 const { generateInvoicePDF } = require('./src/pdf-generator');
-const { sendInvoiceEmail } = require('./src/mailer');
+const { sendInvoiceEmail, testConnection } = require('./src/mailer');
 
 ipcMain.handle('pdf:generate', async (_, data) => {
   const result = await generateInvoicePDF(data);
@@ -65,7 +65,6 @@ ipcMain.handle('pdf:generate', async (_, data) => {
 });
 
 ipcMain.handle('mail:testConnection', async (_, config) => {
-  const { testConnection } = require('./src/mailer');
   await testConnection(config);
   return { success: true };
 });

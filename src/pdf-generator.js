@@ -33,23 +33,25 @@ async function generateInvoicePDF(data) {
   });
 
   const templatePath = path.join(__dirname, '..', 'renderer', 'invoice-template', 'template.html');
-  await win.loadFile(templatePath);
+  let pdfBuffer;
+  try {
+    await win.loadFile(templatePath);
 
-  await win.webContents.executeJavaScript(`
-    renderInvoice(${JSON.stringify({
-      client, date, lineItems, totalAmount, invoiceNumber, settings
-    })});
-  `);
+    const payload = JSON.stringify({ client, date, lineItems, totalAmount, invoiceNumber, settings });
+    await win.webContents.executeJavaScript(
+      `window.__inv = JSON.parse(${JSON.stringify(payload)}); renderInvoice(window.__inv);`
+    );
 
-  await new Promise(resolve => setTimeout(resolve, 400));
+    await new Promise(resolve => setTimeout(resolve, 400));
 
-  const pdfBuffer = await win.webContents.printToPDF({
-    printBackground: true,
-    pageSize: 'Letter',
-    margins: { top: 0, bottom: 0, left: 0, right: 0 }
-  });
-
-  win.close();
+    pdfBuffer = await win.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'Letter',
+      margins: { top: 0, bottom: 0, left: 0, right: 0 }
+    });
+  } finally {
+    if (!win.isDestroyed()) win.close();
+  }
 
   fs.writeFileSync(pdfPath, pdfBuffer);
   db.updateInvoicePdfPath(invoiceId, pdfPath);

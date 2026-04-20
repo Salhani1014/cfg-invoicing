@@ -67,7 +67,8 @@
     }
 
     function fmtDate(d) {
-      return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      const s = String(d).includes('T') ? d : d + 'T12:00:00';
+      return new Date(s).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     }
 
     function renderInvoice(data) {
