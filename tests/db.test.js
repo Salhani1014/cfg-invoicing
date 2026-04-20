@@ -70,3 +70,19 @@ test('getNextInvoiceSeq increments per client', () => {
   db.createInvoice({ clientId, invoiceNumber: 'INV-001', invoiceDate: '2026-04-19', totalAmount: 100, lineItems: [] });
   expect(db.getNextInvoiceSeq(clientId)).toBe(2);
 });
+
+test('deleteClient cascades to invoices and line items', () => {
+  const db = getDb();
+  const clientId = db.addClient({ firstName: 'Del', lastName: 'Me', email: 'd@test.com', phone: '5550000001' });
+  db.createInvoice({
+    clientId,
+    invoiceNumber: 'INV-DEL-001',
+    invoiceDate: '2026-04-19',
+    totalAmount: 200,
+    lineItems: [{ leadType: 'Trucker IUL Leads', quantity: 10, unitPrice: 20, guaranteedMinimum: null }]
+  });
+  db.deleteClient(clientId);
+  expect(db.getClients()).toHaveLength(0);
+  expect(db.getInvoices(clientId)).toHaveLength(0);
+  expect(db.getAllInvoices()).toHaveLength(0);
+});
