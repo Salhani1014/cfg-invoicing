@@ -5,7 +5,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "jest"
+    "test": "jest",
+    "postinstall": "electron-rebuild -f -w better-sqlite3"
   },
   "devDependencies": {
     "electron": "^28.0.0",
