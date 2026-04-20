@@ -171,11 +171,12 @@ function getNextInvoiceSeq(clientId) {
 }
 
 function getLastClientInvoice(clientId) {
-  const invoice = getDb().prepare(
+  const db = getDb();
+  const invoice = db.prepare(
     'SELECT * FROM invoices WHERE client_id=? ORDER BY invoice_date DESC LIMIT 1'
   ).get(clientId);
   if (!invoice) return null;
-  const lineItems = getDb().prepare(
+  const lineItems = db.prepare(
     'SELECT lead_type, quantity, unit_price, guaranteed_minimum FROM invoice_line_items WHERE invoice_id=?'
   ).all(invoice.id);
   return {
