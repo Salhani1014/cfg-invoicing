@@ -1,18 +1,24 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 
+let mainWindow;
+
 function createWindow() {
-  const win = new BrowserWindow({
-    width: 1200,
+  mainWindow = new BrowserWindow({
+    width: 1280,
     height: 800,
+    minWidth: 1024,
+    minHeight: 640,
+    titleBarStyle: 'hiddenInset',
+    backgroundColor: '#0a0a0a',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false,
-    },
+      nodeIntegration: false
+    }
   });
 
-  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 }
 
 app.whenReady().then(() => {
