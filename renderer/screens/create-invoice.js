@@ -207,9 +207,10 @@ export async function createInvoiceScreen(container, params = {}) {
       const wrapper = container.querySelector('#customLineItems');
       const div = document.createElement('div');
       div.innerHTML = renderCustomRow(customRowCount++);
-      wrapper.appendChild(div.firstElementChild);
+      const newRow = div.firstElementChild;
+      wrapper.appendChild(newRow);
+      newRow.querySelector('.custom-amount').addEventListener('input', updateTotal);
       wireRemoveButtons();
-      container.querySelectorAll('.custom-amount').forEach(inp => inp.addEventListener('input', updateTotal));
     };
 
     wireRemoveButtons();
