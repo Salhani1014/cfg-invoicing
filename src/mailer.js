@@ -106,4 +106,29 @@ async function testConnection(config) {
   await transport.verify();
 }
 
-module.exports = { sendInvoiceEmail, sendPaidReceipt, sendReminderEmail, testConnection };
+async function sendPayStub({ contractor, stubNumber, pdfPath, settings }) {
+  const { smtpUser, smtpPass } = getSmtp();
+  const transport = makeTransport(smtpUser, smtpPass);
+  await transport.sendMail({
+    from: `"Checkmate Financial Group LLC" <${smtpUser}>`,
+    to: contractor.email,
+    subject: `Pay Stub ${stubNumber} from Checkmate Financial Group LLC`,
+    text: `Hi ${contractor.legal_name},\n\nPlease find your pay stub ${stubNumber} attached.\n\nThank you!\n\nCheckmate Financial Group LLC`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:520px;color:#222">
+        <div style="background:#1a3a5c;padding:20px 28px;border-radius:8px 8px 0 0">
+          <span style="font-size:18px;font-weight:800;letter-spacing:2px;color:#fff">CHECKMATE FINANCIAL GROUP LLC</span>
+        </div>
+        <div style="padding:28px;border:1px solid #eee;border-top:none;border-radius:0 0 8px 8px">
+          <p>Hi ${contractor.legal_name},</p>
+          <p style="margin-top:14px">Please find your pay stub <strong>${stubNumber}</strong> attached to this email.</p>
+          <p style="margin-top:14px;color:#888;font-size:13px">This document is for record-keeping purposes only.</p>
+          <p style="margin-top:28px">Thank you!</p>
+          <p style="margin-top:6px;font-weight:600">Checkmate Financial Group LLC</p>
+        </div>
+      </div>`,
+    attachments: [{ filename: `${stubNumber}.pdf`, content: await fs.promises.readFile(pdfPath) }]
+  });
+}
+
+module.exports = { sendInvoiceEmail, sendPaidReceipt, sendReminderEmail, testConnection, sendPayStub };
