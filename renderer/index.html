@@ -4,21 +4,36 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com;">
-  <title>Fuego Leadz</title>
+  <title>CFG Invoicing</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
+  <div id="drag-bar"></div>
   <div id="app">
     <nav id="sidebar">
       <div class="sidebar-logo">
-        <span class="logo-text">FUEGO <span class="gold">LEADZ</span></span>
+        <img src="assets/logo.png" alt="CFG" style="width:80px;height:80px;object-fit:contain;display:block;margin:0 auto 6px">
+        <span class="logo-text" style="font-size:12px;text-align:center;display:block;letter-spacing:1.5px">CFG <span class="gold">INVOICING</span></span>
       </div>
       <ul class="nav-links">
         <li><a href="#" data-screen="clients" class="nav-link active">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Clients
+        </a></li>
+        <li><a href="#" data-screen="batch-invoice" class="nav-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
+          Batch Invoice
+        </a></li>
+        <li><a href="#" data-screen="invoices" class="nav-link" style="display:flex;align-items:center;gap:8px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          Invoices
+          <span id="unpaidBadge" style="display:none;background:var(--red,#e03131);color:#fff;border-radius:10px;font-size:10px;font-weight:700;padding:1px 7px;margin-left:auto;line-height:1.6">0</span>
+        </a></li>
+        <li><a href="#" data-screen="contractors" class="nav-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+          Contractors
         </a></li>
         <li><a href="#" data-screen="dashboard" class="nav-link">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>

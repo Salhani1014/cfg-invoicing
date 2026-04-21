@@ -5,6 +5,7 @@ const screenLoaders = {
   'create-invoice': () => import('./screens/create-invoice.js').then(m => m.createInvoiceScreen),
   'batch-invoice':  () => import('./screens/bulk-invoice.js').then(m => m.batchInvoiceScreen),
   invoices:       () => import('./screens/invoices.js').then(m => m.invoicesScreen),
+  contractors:    () => import('./screens/contractors.js').then(m => m.contractorsScreen),
   dashboard:      () => import('./screens/dashboard.js').then(m => m.dashboardScreen),
   settings:       () => import('./screens/settings.js').then(m => m.settingsScreen),
   setup:          () => import('./screens/setup.js').then(m => m.setupScreen),
