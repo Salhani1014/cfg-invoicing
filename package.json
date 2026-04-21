@@ -7,8 +7,7 @@
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --mac dmg",
-    "test": "jest",
-    "postinstall": "electron-rebuild -f -w better-sqlite3"
+    "test": "jest"
   },
   "build": {
     "appId": "com.checkmatefinancialgroup.invoicing",
@@ -53,7 +52,6 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.0",
-    "better-sqlite3": "^12.0.0",
     "electron-updater": "^6.8.3",
     "nodemailer": "^6.9.0"
   }
