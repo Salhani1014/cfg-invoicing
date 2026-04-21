@@ -297,8 +297,9 @@ export async function invoicesScreen(container) {
 
     try {
       if (action === 'markPaid') {
-        const saveFolder = await window.api.settings.get('saveFolder');
-        if (!saveFolder) throw new Error('No save folder set in Settings.');
+        const userCfg = await window.api.userConfig.getConfig();
+        const saveFolder = userCfg?.saveFolder;
+        if (!saveFolder) throw new Error('Save folder not configured. Please run Setup.');
         await window.api.pdf.generatePaid({ invoiceId, saveFolder });
         await window.api.mail.sendPaidReceipt({ invoiceId });
         allInvoices = await window.api.db.getAllInvoices();
@@ -370,8 +371,9 @@ export async function invoicesScreen(container) {
       return inv && !inv.paid;
     });
     if (!unpaidIds.length) { showToast('No unpaid invoices selected.', 'error'); return; }
-    const saveFolder = await window.api.settings.get('saveFolder');
-    if (!saveFolder) { showToast('No save folder set in Settings.', 'error'); return; }
+    const userCfg = await window.api.userConfig.getConfig();
+    const saveFolder = userCfg?.saveFolder;
+    if (!saveFolder) { showToast('Save folder not configured. Please run Setup.', 'error'); return; }
     if (!confirm(`Mark ${unpaidIds.length} invoice${unpaidIds.length !== 1 ? 's' : ''} as paid and send receipts?`)) return;
     let done = 0;
     for (const invoiceId of unpaidIds) {

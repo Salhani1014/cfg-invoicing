@@ -22,7 +22,6 @@ contextBridge.exposeInMainWorld('api', {
     regenerate:   (invoiceId) => ipcRenderer.invoke('pdf:regenerate', invoiceId),
   },
   mail: {
-    send:            (data, path) => ipcRenderer.invoke('mail:send', data, path),
     testConnection:  (config)     => ipcRenderer.invoke('mail:testConnection', config),
     sendPaidReceipt: (data)       => ipcRenderer.invoke('mail:sendPaidReceipt', data),
     sendInvoiceAgain:(data)       => ipcRenderer.invoke('mail:sendInvoiceAgain', data),

@@ -135,7 +135,7 @@ export async function settingsScreen(container) {
     try {
       const cfg = await window.api.userConfig.getConfig() || {};
       await window.api.mail.testConnection({
-        smtpUser: cfg.user,
+        smtpUser: cfg.smtpUser,
         smtpPass: cfg.smtpPass
       });
       status.textContent = '✓ Connected';
