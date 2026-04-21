@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: Helvetica, Arial, sans-serif; background: #fff; color: #000; font-size: 12px; }
+.page { max-width: 760px; margin: 0 auto; border: 1px solid #ccc; }
+
+.header { background: #1a3a5c; color: #fff; padding: 20px 28px; display: flex; justify-content: space-between; align-items: center; }
+.co-name { font-size: 16px; font-weight: 700; letter-spacing: 0.3px; }
+.co-info { font-size: 11px; color: #a8c4e0; margin-top: 3px; }
+.stub-title { font-size: 20px; font-weight: 700; text-align: right; }
+.stub-num { font-size: 11px; color: #a8c4e0; margin-top: 3px; text-align: right; }
+
+.info-row { display: grid; grid-template-columns: 1fr 1fr 1fr; border-bottom: 2px solid #1a3a5c; }
+.info-cell { padding: 12px 18px; border-right: 1px solid #e0e0e0; }
+.info-cell:last-child { border-right: none; }
+.lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #555; margin-bottom: 4px; }
+.val { font-size: 13px; font-weight: 600; color: #000; }
+
+.parties { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #e0e0e0; }
+.party { padding: 14px 18px; }
+.party:first-child { border-right: 1px solid #e0e0e0; }
+.party-name { font-size: 14px; font-weight: 700; color: #000; margin-bottom: 4px; }
+.party-detail { font-size: 11px; color: #000; line-height: 1.7; }
+
+table { width: 100%; border-collapse: collapse; }
+thead tr { background: #f0f4f8; }
+thead th { padding: 9px 14px; text-align: left; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #000; border-bottom: 1px solid #ddd; }
+thead th:not(:first-child) { text-align: right; }
+tbody td { padding: 11px 14px; border-bottom: 1px solid #eee; color: #000; font-size: 13px; }
+tbody td:not(:first-child) { text-align: right; }
+
+.totals-row { display: grid; grid-template-columns: 1fr 1fr; border-top: 2px solid #1a3a5c; }
+.ytd-cell { padding: 14px 18px; border-right: 1px solid #e0e0e0; }
+.net-cell { padding: 14px 18px; background: #f0f4f8; text-align: right; }
+.total-lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #555; margin-bottom: 4px; }
+.total-val { font-size: 13px; font-weight: 700; color: #000; }
+.net-val { font-size: 22px; font-weight: 700; color: #1a3a5c; }
+
+.notes { padding: 12px 18px; background: #fafafa; border-top: 1px solid #e0e0e0; }
+.footer { padding: 8px 18px; background: #1a3a5c; display: flex; justify-content: space-between; align-items: center; }
+.footer-text { font-size: 10px; color: #a8c4e0; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div>
+      <div class="co-name">CHECKMATE FINANCIAL GROUP LLC</div>
+      <div class="co-info">5728 Major Blvd STE 702, Orlando, FL 32819</div>
+    </div>
+    <div>
+      <div class="stub-title">PAY STUB</div>
+      <div class="stub-num" id="stubNumber"></div>
+    </div>
+  </div>
+
+  <div class="info-row">
+    <div class="info-cell">
+      <div class="lbl">Pay Date</div>
+      <div class="val" id="payDate"></div>
+    </div>
+    <div class="info-cell">
+      <div class="lbl">Pay Period</div>
+      <div class="val" id="payPeriod"></div>
+    </div>
+    <div class="info-cell">
+      <div class="lbl">Payment Method</div>
+      <div class="val" id="payMethod"></div>
+    </div>
+  </div>
+
+  <div class="parties">
+    <div class="party">
+      <div class="lbl">Contractor</div>
+      <div class="party-name" id="contractorName"></div>
+      <div class="party-detail" id="contractorDetail"></div>
+    </div>
+    <div class="party">
+      <div class="lbl">Employer</div>
+      <div class="party-name">Checkmate Financial Group LLC</div>
+      <div class="party-detail" id="employerDetail"></div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th>Hours</th>
+        <th>Rate</th>
+        <th>Amount</th>
+      </tr>
+    </thead>
+    <tbody id="lineItems"></tbody>
+  </table>
+
+  <div class="totals-row">
+    <div class="ytd-cell">
+      <div class="total-lbl">YTD Total Paid</div>
+      <div class="total-val" id="ytdTotal"></div>
+    </div>
+    <div class="net-cell">
+      <div class="total-lbl">Net Pay</div>
+      <div class="net-val" id="netPay"></div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="lbl">Notes</div>
+    <div id="notesText" style="font-size:11px;color:#000;margin-top:4px"></div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-text">This document is for record-keeping purposes only and does not constitute a tax form.</div>
+    <div class="footer-text">Checkmate Financial Group LLC</div>
+  </div>
+</div>
+
+<script>
+function renderPayStub(data) {
+  const fmt = n => '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtDate = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '';
+  const pmLabel = { paymentZelle: 'Zelle', paymentBank: 'Bank Transfer', paymentOther: 'Other' };
+
+  function maskTaxId(id) {
+    if (!id) return '';
+    const firstDash = id.indexOf('-');
+    return firstDash === 2
+      ? '**-***' + id.slice(-4)   // EIN XX-XXXXXXX
+      : '***-**-' + id.slice(-4); // SSN XXX-XX-XXXX
+  }
+
+  const p = data.payment;
+  const c = data.contractor;
+
+  document.getElementById('stubNumber').textContent = data.stubNumber;
+  document.getElementById('payDate').textContent = fmtDate(p.pay_date);
+  document.getElementById('payPeriod').textContent =
+    p.pay_period_start && p.pay_period_end
+      ? fmtDate(p.pay_period_start) + ' \u2013 ' + fmtDate(p.pay_period_end)
+      : '\u2014';
+  document.getElementById('payMethod').textContent = pmLabel[p.payment_method] || p.payment_method || 'Zelle';
+
+  document.getElementById('contractorName').textContent = c.legal_name;
+  document.getElementById('contractorDetail').innerHTML =
+    c.address + '<br>' + c.city + ', ' + c.state + ' ' + c.zip +
+    '<br>Tax ID: ' + maskTaxId(c.tax_id) +
+    '<br>' + c.tax_classification;
+
+  document.getElementById('employerDetail').innerHTML =
+    '5728 Major Blvd STE 702<br>Orlando, FL 32819<br>' +
+    (data.settings.companyEmail || 'obada@checkmatefinancialgroup.com');
+
+  document.getElementById('lineItems').innerHTML = `
+    <tr>
+      <td>${p.description}</td>
+      <td>${p.hours}</td>
+      <td>${fmt(p.hourly_rate)}/hr</td>
+      <td>${fmt(p.total_amount)}</td>
+    </tr>`;
+
+  document.getElementById('ytdTotal').textContent = fmt(data.ytdTotal);
+  document.getElementById('netPay').textContent = fmt(p.total_amount);
+  document.getElementById('notesText').textContent = p.description;
+}
+</script>
+</body>
+</html>
