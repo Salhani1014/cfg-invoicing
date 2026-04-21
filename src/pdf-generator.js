@@ -2,10 +2,9 @@ const { BrowserWindow } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const db = require('./db');
-const { generateInvoiceNumber } = require('./invoice-number');
+const { generateInvoiceNumber, generatePayStubNumber } = require('./invoice-number');
 const userConfig = require('./user-config');
 const dbContractors = require('./db-contractors');
-const { generatePayStubNumber } = require('./invoice-number');
 const os = require('os');
 
 async function renderToPDF(data) {
@@ -184,6 +183,7 @@ async function generatePayStub(data) {
 
 async function generateYearEndSummaryPDF({ year, contractors, grandTotal, saveFolder }) {
   const fmtCurrency = n => '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const escHtml = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const maskTaxId = id => {
     if (!id) return '';
     const firstDash = id.indexOf('-');
@@ -195,9 +195,9 @@ async function generateYearEndSummaryPDF({ year, contractors, grandTotal, saveFo
 
   const rows = contractors.map(c => `
     <tr>
-      <td>${c.legal_name}</td>
+      <td>${escHtml(c.legal_name)}</td>
       <td>${maskTaxId(c.tax_id)}</td>
-      <td>${c.tax_classification}</td>
+      <td>${escHtml(c.tax_classification)}</td>
       <td style="text-align:right;font-weight:600">${fmtCurrency(c.total)}</td>
       <td style="text-align:center">${c.total >= 600 ? 'Yes' : 'No'}</td>
     </tr>`).join('');
