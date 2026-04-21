@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const db = require('./src/db');
 const userConfig = require('./src/user-config');
 const dbContractors = require('./src/db-contractors');
@@ -231,8 +232,8 @@ ipcMain.handle('contractors:exportCsv', async (_, params) => {
 
   const year = params.year || new Date().getFullYear().toString();
   const csvPath = path.join(config.saveFolder, `contractor-payments-${year}.csv`);
-  require('fs').writeFileSync(csvPath, header + rows, 'utf8');
-  shell.openPath(csvPath);
+  fs.writeFileSync(csvPath, header + rows, 'utf8');
+  await shell.openPath(csvPath);
   return { csvPath };
 });
 
@@ -247,6 +248,6 @@ ipcMain.handle('contractors:exportSummaryPdf', async (_, params) => {
   const pdfPath = await generateYearEndSummaryPDF({
     year, contractors, grandTotal, saveFolder: config.saveFolder
   });
-  shell.openPath(pdfPath);
+  await shell.openPath(pdfPath);
   return { pdfPath };
 });
