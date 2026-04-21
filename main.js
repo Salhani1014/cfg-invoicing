@@ -212,13 +212,20 @@ ipcMain.handle('contractors:exportCsv', async (_, params) => {
   }
 
   const pmLabel = { paymentZelle: 'Zelle', paymentBank: 'Bank Transfer', paymentOther: 'Other' };
+  const maskTaxId = id => {
+    if (!id) return '';
+    const d = id.indexOf('-');
+    if (d === 2) return '**-***' + id.slice(-4);
+    if (d === 3) return '***-**-' + id.slice(-4);
+    return '***-**-' + id.slice(-4);
+  };
   const header = 'Pay Date,Contractor,Tax ID,Classification,Description,Hours,Rate,Total,Payment Method,Period Total,1099 Required\n';
   const rows = payments.map(p => {
     const total = ytdByContractor[p.contractor_id] || 0;
     return [
       p.pay_date,
       `"${p.legal_name}"`,
-      p.tax_id,
+      maskTaxId(p.tax_id),
       `"${p.tax_classification}"`,
       `"${(p.description || '').replace(/"/g, '""')}"`,
       p.hours,

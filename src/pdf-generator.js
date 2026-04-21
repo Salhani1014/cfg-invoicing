@@ -154,31 +154,36 @@ async function generatePayStub(data) {
     createdBy: config?.user || null
   });
 
-  // YTD includes the just-inserted payment
-  const ytdTotal = await dbContractors.getContractorYtd(contractor.id, year);
+  try {
+    // YTD includes the just-inserted payment
+    const ytdTotal = await dbContractors.getContractorYtd(contractor.id, year);
 
-  const stubNumber = generatePayStubNumber(contractor.legal_name, payment.payDate);
-  const folderName = contractor.legal_name.replace(/[^a-zA-Z0-9 ]/g, '').trim().slice(0, 40);
-  const contractorFolder = path.join(saveFolder, folderName);
-  fs.mkdirSync(contractorFolder, { recursive: true });
-  const pdfPath = path.join(contractorFolder, `${stubNumber}.pdf`);
+    const stubNumber = generatePayStubNumber(contractor.legal_name, payment.payDate);
+    const folderName = contractor.legal_name.replace(/[^a-zA-Z0-9 ]/g, '').trim().slice(0, 40);
+    const contractorFolder = path.join(saveFolder, folderName);
+    fs.mkdirSync(contractorFolder, { recursive: true });
+    const pdfPath = path.join(contractorFolder, `${stubNumber}.pdf`);
 
-  const payRecord = {
-    pay_date: payment.payDate,
-    pay_period_start: payment.payPeriodStart || null,
-    pay_period_end: payment.payPeriodEnd || null,
-    hours: payment.hours,
-    hourly_rate: payment.hourlyRate,
-    total_amount: payment.totalAmount,
-    description: payment.description,
-    payment_method: payment.paymentMethod || 'paymentZelle'
-  };
+    const payRecord = {
+      pay_date: payment.payDate,
+      pay_period_start: payment.payPeriodStart || null,
+      pay_period_end: payment.payPeriodEnd || null,
+      hours: payment.hours,
+      hourly_rate: payment.hourlyRate,
+      total_amount: payment.totalAmount,
+      description: payment.description,
+      payment_method: payment.paymentMethod || 'paymentZelle'
+    };
 
-  const pdfBuffer = await renderPayStubToPDF({ contractor, payment: payRecord, ytdTotal, stubNumber, settings });
-  fs.writeFileSync(pdfPath, pdfBuffer);
-  await dbContractors.updateContractorPaymentPdfPath(paymentId, pdfPath);
+    const pdfBuffer = await renderPayStubToPDF({ contractor, payment: payRecord, ytdTotal, stubNumber, settings });
+    fs.writeFileSync(pdfPath, pdfBuffer);
+    await dbContractors.updateContractorPaymentPdfPath(paymentId, pdfPath);
 
-  return { paymentId, stubNumber, pdfPath, contractor, sendEmail, settings };
+    return { paymentId, stubNumber, pdfPath, contractor, sendEmail, settings };
+  } catch (err) {
+    try { await dbContractors.deleteContractorPayment(paymentId); } catch (_) {}
+    throw err;
+  }
 }
 
 async function generateYearEndSummaryPDF({ year, contractors, grandTotal, saveFolder }) {

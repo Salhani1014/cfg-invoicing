@@ -290,7 +290,7 @@ export async function contractorsScreen(container) {
           </div>
         `).join('')}
         <div style="display:grid;grid-template-columns:90px 1fr 60px 60px 90px 80px;gap:6px;padding:10px 12px;border-top:1px solid var(--border);background:var(--dark,#111)">
-          <span style="color:var(--text-muted);font-size:12px;grid-column:1/5;text-align:right">YTD Total</span>
+          <span style="color:var(--text-muted);font-size:12px;grid-column:1/5;text-align:right">Total Paid (All Time)</span>
           <span style="text-align:right;font-weight:700;color:var(--gold)">${fmt(ytd)}</span>
           <span></span>
         </div>
