@@ -56,4 +56,9 @@ contextBridge.exposeInMainWorld('api', {
     exportCsv:        (params) => ipcRenderer.invoke('contractors:exportCsv', params),
     exportSummaryPdf: (params) => ipcRenderer.invoke('contractors:exportSummaryPdf', params),
   },
+  updater: {
+    onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_, info) => cb(info)),
+    onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', () => cb()),
+    install: () => ipcRenderer.invoke('autoUpdater:install'),
+  },
 });
