@@ -15,11 +15,19 @@ contextBridge.exposeInMainWorld('api', {
     markReminderSent:     (id)          => ipcRenderer.invoke('db:markReminderSent', id),
     updateInvoiceNotes:   (id, notes)   => ipcRenderer.invoke('db:updateInvoiceNotes', id, notes),
     getSchemaVersion:     ()            => ipcRenderer.invoke('db:getSchemaVersion'),
+    getContractors:           ()            => ipcRenderer.invoke('db:getContractors'),
+    addContractor:            (data)        => ipcRenderer.invoke('db:addContractor', data),
+    updateContractor:         (id, data)    => ipcRenderer.invoke('db:updateContractor', id, data),
+    deleteContractor:         (id)          => ipcRenderer.invoke('db:deleteContractor', id),
+    getContractorPayments:    (id)          => ipcRenderer.invoke('db:getContractorPayments', id),
+    updateContractorPayment:  (id, data)    => ipcRenderer.invoke('db:updateContractorPayment', id, data),
+    deleteContractorPayment:  (id)          => ipcRenderer.invoke('db:deleteContractorPayment', id),
   },
   pdf: {
     generate:     (data)      => ipcRenderer.invoke('pdf:generate', data),
     generatePaid: (data)      => ipcRenderer.invoke('pdf:generatePaid', data),
-    regenerate:   (invoiceId) => ipcRenderer.invoke('pdf:regenerate', invoiceId),
+    regenerate:      (invoiceId) => ipcRenderer.invoke('pdf:regenerate', invoiceId),
+    generatePayStub: (data)      => ipcRenderer.invoke('pdf:generatePayStub', data),
   },
   mail: {
     testConnection:  (config)     => ipcRenderer.invoke('mail:testConnection', config),
@@ -43,5 +51,9 @@ contextBridge.exposeInMainWorld('api', {
   shell: {
     openPath:     (p)   => ipcRenderer.invoke('shell:openPath', p),
     openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
-  }
+  },
+  contractors: {
+    exportCsv:        (params) => ipcRenderer.invoke('contractors:exportCsv', params),
+    exportSummaryPdf: (params) => ipcRenderer.invoke('contractors:exportSummaryPdf', params),
+  },
 });
