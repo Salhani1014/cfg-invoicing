@@ -124,7 +124,7 @@ ipcMain.handle('dialog:selectFolder', async () => {
 ipcMain.handle('shell:openPath',     (_, p)   => shell.openPath(p));
 ipcMain.handle('shell:openExternal', (_, url) => shell.openExternal(url));
 ipcMain.handle('autoUpdater:install', () => {
-  try { require('electron-updater').autoUpdater.quitAndInstall(); } catch (_) {}
+  try { require('electron-updater').autoUpdater.quitAndInstall(); } catch (e) { console.error('[updater] Install failed:', e.message); }
 });
 
 const { generateInvoicePDF, generatePaidPDF, regenerateInvoicePDF, generatePayStub, generateYearEndSummaryPDF } = require('./src/pdf-generator');
