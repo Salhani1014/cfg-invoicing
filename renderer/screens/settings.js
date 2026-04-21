@@ -32,18 +32,9 @@ export async function settingsScreen(container) {
       </div>
 
       <div class="card">
-        <h3 style="font-size:15px;font-weight:600;color:var(--gold);margin-bottom:18px">Invoice Save Folder</h3>
-        <div style="display:flex;gap:10px;align-items:center">
-          <input class="form-input" id="saveFolder" readonly value="${esc(settings.saveFolder || '')}" placeholder="No folder selected" style="flex:1;cursor:default">
-          <button class="btn btn-ghost" id="chooseFolderBtn">Choose Folder</button>
-        </div>
-      </div>
-
-      <div class="card">
         <h3 style="font-size:15px;font-weight:600;color:var(--gold);margin-bottom:18px">Email Configuration</h3>
-        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Use a Gmail App Password. <a href="#" id="appPassHelp" style="color:var(--gold)">How to create one</a></p>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">App Password is managed in User Settings above. <a href="#" id="appPassHelp" style="color:var(--gold)">How to create one</a></p>
         <div style="display:flex;gap:10px;align-items:center">
-          <button class="btn btn-primary" id="saveEmailBtn">Save Email Settings</button>
           <button class="btn btn-ghost" id="testEmailBtn">Test Connection</button>
           <span id="emailStatus" style="font-size:13px"></span>
         </div>
@@ -106,26 +97,9 @@ export async function settingsScreen(container) {
     setTimeout(() => { saved.style.display = 'none'; }, 2000);
   });
 
-  document.getElementById('chooseFolderBtn').addEventListener('click', async () => {
-    try {
-      const folder = await window.api.dialog.selectFolder();
-      if (folder) {
-        document.getElementById('saveFolder').value = folder;
-        await window.api.settings.set('saveFolder', folder);
-        showToast('Save folder updated.', 'success');
-      }
-    } catch (e) {
-      showToast('Failed to save.', 'error');
-    }
-  });
-
   document.getElementById('appPassHelp').addEventListener('click', (e) => {
     e.preventDefault();
     window.api.shell.openExternal('https://myaccount.google.com/apppasswords');
-  });
-
-  document.getElementById('saveEmailBtn').addEventListener('click', async () => {
-    showToast('Email settings saved.', 'success');
   });
 
   document.getElementById('testEmailBtn').addEventListener('click', async () => {
