@@ -38,6 +38,7 @@ export async function invoicesScreen(container) {
   let search = '';
   let sort = 'date-desc';
   let leadTypeFilter = 'all';
+  let createdByFilter = 'all';
   let selectedIds = new Set();
 
   try {
@@ -58,7 +59,8 @@ export async function invoicesScreen(container) {
         : leadTypeFilter === '__custom__'
           ? inv.invoice_type === 'custom'
           : getRawLeadTypes(inv.line_items_raw).includes(leadTypeFilter);
-      return matchesStatus && matchesSearch && matchesLeadType;
+      const matchesCreatedBy = createdByFilter === 'all' || inv.created_by === createdByFilter;
+      return matchesStatus && matchesSearch && matchesLeadType && matchesCreatedBy;
     });
 
     result = [...result].sort((a, b) => {
@@ -119,6 +121,12 @@ export async function invoicesScreen(container) {
             <option value="__custom__" ${leadTypeFilter === '__custom__' ? 'selected' : ''}>Custom Invoices</option>
           </select>
           <div style="width:1px;height:24px;background:var(--border);margin:0 4px"></div>
+          <select id="createdByFilter" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px;cursor:pointer">
+            <option value="all" ${createdByFilter === 'all' ? 'selected' : ''}>All Users</option>
+            <option value="braxton" ${createdByFilter === 'braxton' ? 'selected' : ''}>Braxton</option>
+            <option value="obada" ${createdByFilter === 'obada' ? 'selected' : ''}>Obada</option>
+          </select>
+          <div style="width:1px;height:24px;background:var(--border);margin:0 4px"></div>
           <select id="sortSelect" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:13px;cursor:pointer">
             ${Object.entries(SORT_LABELS).map(([v, l]) =>
               `<option value="${v}" ${sort === v ? 'selected' : ''}>${l}</option>`
@@ -165,6 +173,7 @@ export async function invoicesScreen(container) {
       btn.addEventListener('click', () => { filter = btn.dataset.filter; selectedIds.clear(); render(); });
     });
     container.querySelector('#leadTypeFilter').addEventListener('change', e => { leadTypeFilter = e.target.value; render(); });
+    container.querySelector('#createdByFilter').addEventListener('change', e => { createdByFilter = e.target.value; render(); });
     container.querySelector('#sortSelect').addEventListener('change', e => { sort = e.target.value; render(); });
 
     // Select all
@@ -211,18 +220,23 @@ export async function invoicesScreen(container) {
 
     const actions = isPaid
       ? `<button class="btn btn-ghost btn-sm" data-action="resendReceipt" data-id="${inv.id}">Resend Receipt</button>
+         <button class="btn btn-ghost btn-sm" data-action="downloadPdf" data-id="${inv.id}">↓ PDF</button>
          ${noteBtn}
          <button class="btn btn-danger btn-sm" data-action="delete" data-id="${inv.id}">Delete</button>`
       : `<button class="btn btn-primary btn-sm" data-action="markPaid" data-id="${inv.id}">Mark Paid</button>
          <button class="btn btn-ghost btn-sm" data-action="sendAgain" data-id="${inv.id}">Resend</button>
          <button class="btn btn-ghost btn-sm" data-action="sendReminder" data-id="${inv.id}" ${hasReminder ? 'style="color:var(--text-muted)"' : ''}>Remind</button>
+         <button class="btn btn-ghost btn-sm" data-action="downloadPdf" data-id="${inv.id}">↓ PDF</button>
          ${noteBtn}
          <button class="btn btn-danger btn-sm" data-action="delete" data-id="${inv.id}">Delete</button>`;
 
     const mainRow = `
       <tr style="${isSelected ? 'background:rgba(201,168,76,0.06)' : ''}">
         <td><input type="checkbox" class="row-check" data-id="${inv.id}" ${isSelected ? 'checked' : ''} style="accent-color:var(--gold)"></td>
-        <td style="color:var(--gold);font-weight:600;font-size:13px">${esc(inv.invoice_number)}</td>
+        <td style="color:var(--gold);font-weight:600;font-size:13px">
+          ${esc(inv.invoice_number)}
+          <span style="font-size:10px;color:var(--text-muted);font-weight:400;margin-left:6px">${esc(inv.created_by || '')}</span>
+        </td>
         <td><strong>${esc(inv.first_name)} ${esc(inv.last_name)}</strong></td>
         <td style="color:var(--text-muted);font-size:13px">${esc(parseLeadTypes(inv.line_items_raw))}</td>
         <td style="color:var(--text-muted)">${formatDate(inv.invoice_date)}</td>
@@ -247,6 +261,20 @@ export async function invoicesScreen(container) {
 
   async function handleAction(action, invoiceId) {
     if (action === 'note') { openNoteModal(invoiceId); return; }
+
+    if (action === 'downloadPdf') {
+      const btn = container.querySelector(`[data-action="downloadPdf"][data-id="${invoiceId}"]`);
+      if (btn) { btn.disabled = true; btn.textContent = '…'; }
+      try {
+        const result = await window.api.pdf.regenerate(invoiceId);
+        await window.api.shell.openPath(result.pdfPath);
+      } catch (err) {
+        alert('Failed to generate PDF: ' + (err.message || err));
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '↓ PDF'; }
+      }
+      return;
+    }
 
     if (action === 'delete') {
       if (!confirm('Delete this invoice? This cannot be undone.')) return;
