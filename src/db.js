@@ -1,279 +1,261 @@
-const Database = require('better-sqlite3');
-const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
+const { SUPABASE_URL, SUPABASE_ANON_KEY } = require('./supabase');
 
-let db;
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-function getDb() {
-  if (db) return db;
-  let userDataPath;
-  try {
-    const { app } = require('electron');
-    userDataPath = app ? app.getPath('userData') : null;
-  } catch (_) {
-    userDataPath = null;
+// ─── Clients ────────────────────────────────────────────────────────────────
+
+async function getClients() {
+  const [{ data: clients, error: ce }, { data: invoices, error: ie }] = await Promise.all([
+    supabase.from('clients').select('*').order('last_name').order('first_name'),
+    supabase.from('invoices').select('id, client_id, invoice_date, total_amount, paid')
+  ]);
+  if (ce) throw ce;
+  if (ie) throw ie;
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 7);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+
+  return (clients || []).map(c => {
+    const ci = (invoices || []).filter(i => i.client_id === c.id);
+    const sorted = [...ci].sort((a, b) => b.invoice_date.localeCompare(a.invoice_date));
+    const last = sorted[0];
+    const overdue_count = ci.filter(i => !i.paid && i.invoice_date <= cutoffStr).length;
+    const total_unpaid = ci.filter(i => !i.paid).reduce((s, i) => s + Number(i.total_amount), 0);
+    return { ...c, last_invoice_date: last?.invoice_date || null, last_invoice_amount: last?.total_amount || null, overdue_count, total_unpaid };
+  });
+}
+
+async function addClient(data) {
+  const { data: row, error } = await supabase
+    .from('clients')
+    .insert({ first_name: data.firstName, last_name: data.lastName, email: data.email, phone: data.phone })
+    .select('id').single();
+  if (error) throw error;
+  return row.id;
+}
+
+async function updateClient(id, data) {
+  const { error } = await supabase
+    .from('clients')
+    .update({ first_name: data.firstName, last_name: data.lastName, email: data.email, phone: data.phone })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+async function deleteClient(id) {
+  const { error } = await supabase.rpc('delete_client_cascade', { p_client_id: id });
+  if (error) throw error;
+}
+
+async function getClientById(id) {
+  const { data, error } = await supabase.from('clients').select('*').eq('id', id).single();
+  if (error) throw error;
+  return data;
+}
+
+// ─── Invoices ───────────────────────────────────────────────────────────────
+
+async function createInvoice(data) {
+  const { data: result, error } = await supabase.rpc('create_invoice_with_items', {
+    p_client_id:      data.clientId,
+    p_invoice_number: data.invoiceNumber,
+    p_invoice_date:   data.invoiceDate,
+    p_total_amount:   data.totalAmount,
+    p_payment_method: data.paymentMethod || null,
+    p_invoice_type:   data.invoiceType || 'lead',
+    p_created_by:     data.createdBy || 'braxton',
+    p_line_items:     data.lineItems.map(li => ({
+      lead_type:          li.leadType,
+      quantity:           li.quantity,
+      unit_price:         li.unitPrice,
+      guaranteed_minimum: li.guaranteedMinimum || null
+    }))
+  });
+  if (error) throw error;
+  return result;
+}
+
+async function updateInvoicePdfPath(id, pdfPath) {
+  const { error } = await supabase.from('invoices').update({ pdf_path: pdfPath }).eq('id', id);
+  if (error) throw error;
+}
+
+async function markInvoiceEmailed(id) {
+  const { error } = await supabase.from('invoices').update({ emailed: true }).eq('id', id);
+  if (error) throw error;
+}
+
+async function getInvoices(clientId) {
+  const { data: invoices, error } = await supabase
+    .from('invoices').select('*').eq('client_id', clientId).order('invoice_date', { ascending: false });
+  if (error) throw error;
+  if (!invoices || !invoices.length) return [];
+
+  const { data: lineItems } = await supabase
+    .from('invoice_line_items').select('invoice_id, lead_type')
+    .in('invoice_id', invoices.map(i => i.id));
+
+  const ltByInvoice = {};
+  for (const li of (lineItems || [])) {
+    if (!ltByInvoice[li.invoice_id]) ltByInvoice[li.invoice_id] = [];
+    ltByInvoice[li.invoice_id].push(li.lead_type);
   }
-  userDataPath = userDataPath || path.join(__dirname, '..', 'test-data');
-  db = new Database(path.join(userDataPath, 'fuego-leadz.db'));
-  db.pragma('foreign_keys = ON');
-  migrate(db);
-  return db;
+  return invoices.map(inv => ({ ...inv, lead_types: (ltByInvoice[inv.id] || []).join(',') }));
 }
 
-function migrate(db) {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS clients (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      first_name TEXT NOT NULL,
-      last_name TEXT NOT NULL,
-      email TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+async function getAllInvoices() {
+  const { data: invoices, error } = await supabase
+    .from('invoices')
+    .select('*, clients!inner(first_name, last_name, email)')
+    .order('invoice_date', { ascending: false });
+  if (error) throw error;
 
-    CREATE TABLE IF NOT EXISTS invoices (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      client_id INTEGER NOT NULL REFERENCES clients(id),
-      invoice_number TEXT NOT NULL UNIQUE,
-      invoice_date TEXT NOT NULL,
-      total_amount REAL NOT NULL,
-      pdf_path TEXT,
-      emailed INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
+  const { data: lineItems } = await supabase.from('invoice_line_items').select('*');
 
-    CREATE TABLE IF NOT EXISTS invoice_line_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      invoice_id INTEGER NOT NULL REFERENCES invoices(id),
-      lead_type TEXT NOT NULL,
-      quantity INTEGER NOT NULL,
-      unit_price REAL NOT NULL,
-      guaranteed_minimum INTEGER
-    );
+  const liByInvoice = {};
+  for (const li of (lineItems || [])) {
+    if (!liByInvoice[li.invoice_id]) liByInvoice[li.invoice_id] = [];
+    liByInvoice[li.invoice_id].push(li);
+  }
 
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_invoices_client_id ON invoices(client_id);
-  `);
-
-  // Safe column additions — no-op if already present
-  const cols = db.prepare('PRAGMA table_info(invoices)').all().map(c => c.name);
-  if (!cols.includes('paid'))              db.exec('ALTER TABLE invoices ADD COLUMN paid INTEGER NOT NULL DEFAULT 0');
-  if (!cols.includes('paid_at'))           db.exec('ALTER TABLE invoices ADD COLUMN paid_at TEXT');
-  if (!cols.includes('payment_method'))    db.exec('ALTER TABLE invoices ADD COLUMN payment_method TEXT');
-  if (!cols.includes('reminder_sent_at'))  db.exec('ALTER TABLE invoices ADD COLUMN reminder_sent_at TEXT');
-  if (!cols.includes('notes'))             db.exec('ALTER TABLE invoices ADD COLUMN notes TEXT');
-  if (!cols.includes('invoice_type'))      db.exec("ALTER TABLE invoices ADD COLUMN invoice_type TEXT NOT NULL DEFAULT 'lead'");
+  return (invoices || []).map(inv => ({
+    ...inv,
+    first_name: inv.clients.first_name,
+    last_name:  inv.clients.last_name,
+    email:      inv.clients.email,
+    line_items_raw: (liByInvoice[inv.id] || [])
+      .map(li => `${li.lead_type}\x1f${li.quantity}\x1f${li.unit_price}\x1f${li.guaranteed_minimum || ''}`)
+      .join(',')
+  }));
 }
 
-// Clients
-function getClients() {
-  return getDb().prepare(`
-    SELECT c.*,
-      (SELECT invoice_date FROM invoices WHERE client_id = c.id ORDER BY invoice_date DESC LIMIT 1) as last_invoice_date,
-      (SELECT total_amount FROM invoices WHERE client_id = c.id ORDER BY invoice_date DESC LIMIT 1) as last_invoice_amount,
-      (SELECT COUNT(*) FROM invoices WHERE client_id = c.id AND paid=0 AND julianday('now') - julianday(invoice_date) >= 7) as overdue_count,
-      COALESCE((SELECT SUM(total_amount) FROM invoices WHERE client_id = c.id AND paid=0), 0) as total_unpaid
-    FROM clients c
-    ORDER BY c.last_name, c.first_name
-  `).all();
+async function getNextInvoiceSeq(clientId) {
+  const { count } = await supabase
+    .from('invoices').select('*', { count: 'exact', head: true }).eq('client_id', clientId);
+  return (count || 0) + 1;
 }
 
-function addClient(data) {
-  const stmt = getDb().prepare(
-    'INSERT INTO clients (first_name, last_name, email, phone) VALUES (?, ?, ?, ?)'
-  );
-  const result = stmt.run(data.firstName, data.lastName, data.email, data.phone);
-  return result.lastInsertRowid;
-}
-
-function updateClient(id, data) {
-  getDb().prepare(
-    'UPDATE clients SET first_name=?, last_name=?, email=?, phone=? WHERE id=?'
-  ).run(data.firstName, data.lastName, data.email, data.phone, id);
-}
-
-function deleteClient(id) {
-  const db = getDb();
-  db.transaction(() => {
-    const invoiceIds = db.prepare('SELECT id FROM invoices WHERE client_id=?').all(id).map(r => r.id);
-    for (const invoiceId of invoiceIds) {
-      db.prepare('DELETE FROM invoice_line_items WHERE invoice_id=?').run(invoiceId);
-    }
-    db.prepare('DELETE FROM invoices WHERE client_id=?').run(id);
-    db.prepare('DELETE FROM clients WHERE id=?').run(id);
-  })();
-}
-
-// Invoices
-function createInvoice(data) {
-  const db = getDb();
-  const insertInvoice = db.prepare(
-    'INSERT INTO invoices (client_id, invoice_number, invoice_date, total_amount, payment_method, invoice_type) VALUES (?, ?, ?, ?, ?, ?)'
-  );
-  const insertLineItem = db.prepare(
-    'INSERT INTO invoice_line_items (invoice_id, lead_type, quantity, unit_price, guaranteed_minimum) VALUES (?, ?, ?, ?, ?)'
-  );
-
-  const invoiceId = db.transaction(() => {
-    const result = insertInvoice.run(
-      data.clientId, data.invoiceNumber, data.invoiceDate, data.totalAmount,
-      data.paymentMethod || null, data.invoiceType || 'lead'
-    );
-    const invoiceId = result.lastInsertRowid;
-    for (const item of data.lineItems) {
-      insertLineItem.run(invoiceId, item.leadType, item.quantity, item.unitPrice, item.guaranteedMinimum || null);
-    }
-    return invoiceId;
-  })();
-
-  return invoiceId;
-}
-
-function updateInvoicePdfPath(id, pdfPath) {
-  getDb().prepare('UPDATE invoices SET pdf_path=? WHERE id=?').run(pdfPath, id);
-}
-
-function markInvoiceEmailed(id) {
-  getDb().prepare('UPDATE invoices SET emailed=1 WHERE id=?').run(id);
-}
-
-function getInvoices(clientId) {
-  return getDb().prepare(`
-    SELECT i.*, GROUP_CONCAT(li.lead_type) as lead_types
-    FROM invoices i
-    LEFT JOIN invoice_line_items li ON li.invoice_id = i.id
-    WHERE i.client_id = ?
-    GROUP BY i.id
-    ORDER BY i.invoice_date DESC
-  `).all(clientId);
-}
-
-function getAllInvoices() {
-  return getDb().prepare(`
-    SELECT i.*, c.first_name, c.last_name, c.email,
-      GROUP_CONCAT(li.lead_type || char(31) || li.quantity || char(31) || li.unit_price || char(31) || COALESCE(li.guaranteed_minimum,'')) as line_items_raw
-    FROM invoices i
-    JOIN clients c ON c.id = i.client_id
-    LEFT JOIN invoice_line_items li ON li.invoice_id = i.id
-    GROUP BY i.id
-    ORDER BY i.invoice_date DESC
-  `).all();
-}
-
-function getNextInvoiceSeq(clientId) {
-  const row = getDb().prepare(
-    'SELECT COUNT(*) as cnt FROM invoices WHERE client_id=?'
-  ).get(clientId);
-  return row.cnt + 1;
-}
-
-function getLastClientInvoice(clientId) {
-  const db = getDb();
-  const invoice = db.prepare(
-    'SELECT * FROM invoices WHERE client_id=? ORDER BY invoice_date DESC LIMIT 1'
-  ).get(clientId);
+async function getLastClientInvoice(clientId) {
+  const { data: invoices } = await supabase
+    .from('invoices').select('*').eq('client_id', clientId)
+    .order('invoice_date', { ascending: false }).limit(1);
+  const invoice = invoices?.[0];
   if (!invoice) return null;
-  const lineItems = db.prepare(
-    'SELECT lead_type, quantity, unit_price, guaranteed_minimum FROM invoice_line_items WHERE invoice_id=?'
-  ).all(invoice.id);
+
+  const { data: lineItems } = await supabase
+    .from('invoice_line_items')
+    .select('lead_type, quantity, unit_price, guaranteed_minimum')
+    .eq('invoice_id', invoice.id);
+
   return {
     ...invoice,
-    lineItems: lineItems.map(li => ({
-      leadType: li.lead_type,
-      quantity: li.quantity,
-      unitPrice: li.unit_price,
-      guaranteedMinimum: li.guaranteed_minimum
+    lineItems: (lineItems || []).map(li => ({
+      leadType: li.lead_type, quantity: li.quantity,
+      unitPrice: li.unit_price, guaranteedMinimum: li.guaranteed_minimum
     }))
   };
 }
 
-function markReminderSent(id) {
-  getDb().prepare("UPDATE invoices SET reminder_sent_at=datetime('now') WHERE id=?").run(id);
+async function markReminderSent(id) {
+  const { error } = await supabase
+    .from('invoices').update({ reminder_sent_at: new Date().toISOString() }).eq('id', id);
+  if (error) throw error;
 }
 
-function updateInvoiceNotes(id, notes) {
-  getDb().prepare('UPDATE invoices SET notes=? WHERE id=?').run(notes || null, id);
+async function updateInvoiceNotes(id, notes) {
+  const { error } = await supabase
+    .from('invoices').update({ notes: notes || null }).eq('id', id);
+  if (error) throw error;
 }
 
-function getOverdueInvoices(days = 7) {
-  return getDb().prepare(`
-    SELECT i.*, c.first_name, c.last_name, c.email, c.phone
-    FROM invoices i
-    JOIN clients c ON c.id = i.client_id
-    WHERE i.paid = 0
-      AND i.reminder_sent_at IS NULL
-      AND julianday('now') - julianday(i.invoice_date) >= ?
-  `).all(days);
+async function getOverdueInvoices(days = 7) {
+  const { data, error } = await supabase
+    .from('invoices')
+    .select('*, clients!inner(first_name, last_name, email, phone)')
+    .eq('paid', false).is('reminder_sent_at', null);
+  if (error) throw error;
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+
+  return (data || [])
+    .filter(inv => inv.invoice_date <= cutoffStr)
+    .map(inv => ({
+      ...inv,
+      first_name: inv.clients.first_name, last_name: inv.clients.last_name,
+      email: inv.clients.email, phone: inv.clients.phone
+    }));
 }
 
-function markInvoicePaid(id) {
-  getDb().prepare("UPDATE invoices SET paid=1, paid_at=datetime('now') WHERE id=?").run(id);
+async function markInvoicePaid(id) {
+  const { error } = await supabase
+    .from('invoices').update({ paid: true, paid_at: new Date().toISOString() }).eq('id', id);
+  if (error) throw error;
 }
 
-function deleteInvoice(id) {
-  const db = getDb();
-  db.transaction(() => {
-    db.prepare('DELETE FROM invoice_line_items WHERE invoice_id=?').run(id);
-    db.prepare('DELETE FROM invoices WHERE id=?').run(id);
-  })();
+async function deleteInvoice(id) {
+  const { error } = await supabase.rpc('delete_invoice_cascade', { p_invoice_id: id });
+  if (error) throw error;
 }
 
-function getInvoiceById(id) {
-  const invoice = getDb().prepare(`
-    SELECT i.*, c.first_name, c.last_name, c.email, c.phone
-    FROM invoices i
-    JOIN clients c ON c.id = i.client_id
-    WHERE i.id = ?
-  `).get(id);
-  if (!invoice) return null;
-  const lineItems = getDb().prepare(
-    'SELECT lead_type, quantity, unit_price, guaranteed_minimum FROM invoice_line_items WHERE invoice_id=?'
-  ).all(id);
+async function getInvoiceById(id) {
+  const { data: invoice, error } = await supabase
+    .from('invoices')
+    .select('*, clients!inner(first_name, last_name, email, phone)')
+    .eq('id', id).single();
+  if (error) throw error;
+
+  const { data: lineItems } = await supabase
+    .from('invoice_line_items')
+    .select('lead_type, quantity, unit_price, guaranteed_minimum')
+    .eq('invoice_id', id);
+
   return {
     ...invoice,
-    lineItems: lineItems.map(li => ({
-      leadType: li.lead_type,
-      quantity: li.quantity,
-      unitPrice: li.unit_price,
-      guaranteedMinimum: li.guaranteed_minimum
+    first_name: invoice.clients.first_name, last_name: invoice.clients.last_name,
+    email: invoice.clients.email, phone: invoice.clients.phone,
+    lineItems: (lineItems || []).map(li => ({
+      leadType: li.lead_type, quantity: li.quantity,
+      unitPrice: li.unit_price, guaranteedMinimum: li.guaranteed_minimum
     }))
   };
 }
 
-// Settings
-function getSetting(key) {
-  const row = getDb().prepare('SELECT value FROM settings WHERE key=?').get(key);
-  return row ? row.value : null;
+// ─── Settings ───────────────────────────────────────────────────────────────
+
+async function getSetting(key) {
+  const { data } = await supabase.from('settings').select('value').eq('key', key).single();
+  return data?.value || null;
 }
 
-function setSetting(key, value) {
-  getDb().prepare(
-    'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value'
-  ).run(key, value);
+async function setSetting(key, value) {
+  const { error } = await supabase.from('settings').upsert({ key, value }, { onConflict: 'key' });
+  if (error) throw error;
 }
 
-function getAllSettings() {
-  return getDb().prepare('SELECT key, value FROM settings').all()
-    .reduce((acc, row) => { acc[row.key] = row.value; return acc; }, {});
+async function getAllSettings() {
+  const { data } = await supabase.from('settings').select('key, value');
+  return (data || []).reduce((acc, row) => { acc[row.key] = row.value; return acc; }, {});
 }
 
-function closeDb() {
-  if (db) {
-    db.close();
-    db = null;
-  }
+async function getSchemaVersion() {
+  const { data } = await supabase.from('settings').select('value').eq('key', 'schemaVersion').single();
+  return data ? Number(data.value) : 0;
 }
+
+// ─── Utility ────────────────────────────────────────────────────────────────
+
+function closeDb() { /* no-op: Supabase is stateless */ }
 
 module.exports = {
-  getClients, addClient, updateClient, deleteClient,
+  getClients, addClient, updateClient, deleteClient, getClientById,
   createInvoice, updateInvoicePdfPath, markInvoiceEmailed,
   markInvoicePaid, deleteInvoice, getInvoiceById,
   getLastClientInvoice, markReminderSent, updateInvoiceNotes, getOverdueInvoices,
   getInvoices, getAllInvoices, getNextInvoiceSeq,
-  getSetting, setSetting, getAllSettings,
-  closeDb,
-  _getDb: getDb
+  getSetting, setSetting, getAllSettings, getSchemaVersion,
+  closeDb
 };
