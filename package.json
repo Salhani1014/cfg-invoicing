@@ -40,7 +40,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "checkmatefinancialgroup",
+      "owner": "Salhani1014",
       "repo": "cfg-invoicing"
     }
   },
