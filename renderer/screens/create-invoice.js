@@ -357,8 +357,9 @@ export async function createInvoiceScreen(container, params = {}) {
       }
     }
 
-    const saveFolder = await window.api.settings.get('saveFolder');
-    if (!saveFolder) { err.textContent = 'No save folder set. Please configure it in Settings first.'; err.style.display = 'block'; return; }
+    const userCfg = await window.api.userConfig.getConfig();
+    const saveFolder = userCfg?.saveFolder;
+    if (!saveFolder) { err.textContent = 'Save folder not configured. Go to Settings to set it up.'; err.style.display = 'block'; return; }
 
     const client = clients.find(c => c.id === clientId);
     const date = container.querySelector('#invoiceDate').value;
