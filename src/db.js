@@ -93,9 +93,10 @@ async function getInvoices(clientId) {
   if (error) throw error;
   if (!invoices || !invoices.length) return [];
 
-  const { data: lineItems } = await supabase
+  const { data: lineItems, error: le } = await supabase
     .from('invoice_line_items').select('invoice_id, lead_type')
     .in('invoice_id', invoices.map(i => i.id));
+  if (le) throw le;
 
   const ltByInvoice = {};
   for (const li of (lineItems || [])) {
@@ -112,7 +113,8 @@ async function getAllInvoices() {
     .order('invoice_date', { ascending: false });
   if (error) throw error;
 
-  const { data: lineItems } = await supabase.from('invoice_line_items').select('*');
+  const { data: lineItems, error: le } = await supabase.from('invoice_line_items').select('*');
+  if (le) throw le;
 
   const liByInvoice = {};
   for (const li of (lineItems || [])) {
@@ -144,10 +146,11 @@ async function getLastClientInvoice(clientId) {
   const invoice = invoices?.[0];
   if (!invoice) return null;
 
-  const { data: lineItems } = await supabase
+  const { data: lineItems, error: le } = await supabase
     .from('invoice_line_items')
     .select('lead_type, quantity, unit_price, guaranteed_minimum')
     .eq('invoice_id', invoice.id);
+  if (le) throw le;
 
   return {
     ...invoice,
@@ -227,7 +230,8 @@ async function getInvoiceById(id) {
 // ─── Settings ───────────────────────────────────────────────────────────────
 
 async function getSetting(key) {
-  const { data } = await supabase.from('settings').select('value').eq('key', key).single();
+  const { data, error } = await supabase.from('settings').select('value').eq('key', key).single();
+  if (error && error.code !== 'PGRST116') throw error;
   return data?.value || null;
 }
 
@@ -237,12 +241,14 @@ async function setSetting(key, value) {
 }
 
 async function getAllSettings() {
-  const { data } = await supabase.from('settings').select('key, value');
+  const { data, error } = await supabase.from('settings').select('key, value');
+  if (error) throw error;
   return (data || []).reduce((acc, row) => { acc[row.key] = row.value; return acc; }, {});
 }
 
 async function getSchemaVersion() {
-  const { data } = await supabase.from('settings').select('value').eq('key', 'schemaVersion').single();
+  const { data, error } = await supabase.from('settings').select('value').eq('key', 'schemaVersion').single();
+  if (error && error.code !== 'PGRST116') throw error;
   return data ? Number(data.value) : 0;
 }
 
