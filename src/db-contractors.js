@@ -101,7 +101,7 @@ async function addContractorPayment(data) {
       recurring: data.recurring || false,
       pdf_path: null,
       emailed: false,
-      created_by: data.createdBy || 'braxton'
+      created_by: data.createdBy || null
     })
     .select('id').single();
   if (error) throw error;
