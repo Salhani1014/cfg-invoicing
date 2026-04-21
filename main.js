@@ -64,7 +64,8 @@ app.whenReady().then(() => {
     try {
       const settings = await db.getAllSettings();
       if (settings.overdueRemindersEnabled === 'false') return;
-      const days = Number(settings.overdueReminderDays) || 7;
+      const parsedDays = Number(settings.overdueReminderDays);
+      const days = Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays : 7;
       const overdue = await db.getOverdueInvoices(days);
       for (const inv of overdue) {
         try {

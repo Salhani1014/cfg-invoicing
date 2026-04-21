@@ -70,6 +70,15 @@
       return '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    function esc(v) {
+      return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function fmtDate(d) {
       const s = String(d).includes('T') ? d : d + 'T12:00:00';
       return new Date(s).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -78,7 +87,7 @@
     function renderInvoice(data) {
       const rows = data.lineItems.map(item => `
         <tr>
-          <td>${item.leadType}${item.guaranteedMinimum != null ? `<span class="gmin-badge">Guaranteed Min: ${item.guaranteedMinimum}</span>` : ''}</td>
+          <td>${esc(item.leadType)}${item.guaranteedMinimum != null ? `<span class="gmin-badge">Guaranteed Min: ${esc(item.guaranteedMinimum)}</span>` : ''}</td>
           <td>${fmt(item.unitPrice)}</td>
         </tr>
       `).join('');
@@ -115,14 +124,14 @@
               <div class="company-info">
                 5728 Major Blvd STE 702, Orlando FL 32819<br>
                 Doc# L26000014292<br>
-                ${settings.companyEmail || 'obada@checkmatefinancialgroup.com'}
+                ${esc(settings.companyEmail || 'obada@checkmatefinancialgroup.com')}
               </div>
             </div>
           </div>
           <div class="invoice-meta">
             <div class="invoice-label">INVOICE</div>
             <div class="invoice-detail">
-              <strong>Invoice #:</strong> ${data.invoiceNumber}<br>
+              <strong>Invoice #:</strong> ${esc(data.invoiceNumber)}<br>
               <strong>Date:</strong> ${fmtDate(data.date)}
             </div>
           </div>
@@ -131,10 +140,10 @@
         <div class="bill-section">
           <div>
             <div class="bill-to-label">Bill To</div>
-            <div class="bill-to-name">${data.client.first_name} ${data.client.last_name}</div>
+            <div class="bill-to-name">${esc(data.client.first_name)} ${esc(data.client.last_name)}</div>
             <div class="bill-to-detail">
-              ${data.client.email}<br>
-              ${data.client.phone}
+              ${esc(data.client.email)}<br>
+              ${esc(data.client.phone)}
             </div>
           </div>
           ${dueBoxHtml}
@@ -159,8 +168,8 @@
         <div class="payment-section">
           <div class="payment-title">Payment Method</div>
           <div class="payment-method">
-            <span class="pm-label">${pmLabel}:</span>
-            <span class="pm-value">${pmValue}</span>
+            <span class="pm-label">${esc(pmLabel)}:</span>
+            <span class="pm-value">${esc(pmValue)}</span>
           </div>
         </div>
 

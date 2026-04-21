@@ -108,9 +108,10 @@ export async function settingsScreen(container) {
     status.style.color = 'var(--text-muted)';
     try {
       const cfg = await window.api.userConfig.getConfig() || {};
+      const pendingPass = container.querySelector('#userSmtpPass').value.trim();
       await window.api.mail.testConnection({
         smtpUser: cfg.smtpUser,
-        smtpPass: cfg.smtpPass
+        smtpPass: pendingPass || cfg.smtpPass
       });
       status.textContent = '✓ Connected';
       status.style.color = 'var(--green)';
@@ -132,7 +133,9 @@ export async function settingsScreen(container) {
   document.getElementById('saveReminderBtn').addEventListener('click', async () => {
     try {
       await window.api.settings.set('overdueRemindersEnabled', document.getElementById('overdueEnabled').checked ? 'true' : 'false');
-      await window.api.settings.set('overdueReminderDays', document.getElementById('overdueDays').value || '7');
+      const daysRaw = Number(document.getElementById('overdueDays').value);
+      const daysClean = Number.isFinite(daysRaw) && daysRaw > 0 ? String(Math.min(90, Math.floor(daysRaw))) : '7';
+      await window.api.settings.set('overdueReminderDays', daysClean);
       showToast('Reminder settings saved.', 'success');
     } catch (e) {
       showToast('Failed to save.', 'error');

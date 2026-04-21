@@ -9,7 +9,7 @@ const ALL_LEAD_TYPES = ['Trucker IUL Leads', 'Spanish IUL Leads', 'Widow of Vete
 function parseLeadTypes(raw) {
   if (!raw) return '—';
   return raw.split(',')
-    .map(r => { const [type] = r.split(':'); return LEAD_TYPE_SHORT[type] || type; })
+    .map(r => { const [type] = r.split('\x1f'); return LEAD_TYPE_SHORT[type] || type; })
     .join(', ');
 }
 
@@ -269,7 +269,7 @@ export async function invoicesScreen(container) {
         const result = await window.api.pdf.regenerate(invoiceId);
         await window.api.shell.openPath(result.pdfPath);
       } catch (err) {
-        alert('Failed to generate PDF: ' + (err.message || err));
+        showToast('Failed to generate PDF: ' + (err.message || err), 'error');
       } finally {
         if (btn) { btn.disabled = false; btn.textContent = '↓ PDF'; }
       }

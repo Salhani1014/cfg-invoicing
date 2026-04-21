@@ -36,20 +36,27 @@ async function renderToPDF(data) {
 async function generateInvoicePDF(data) {
   const { client, date, lineItems, totalAmount, saveFolder, sendEmail } = data;
 
-  const [settings, invoiceNumber] = [
-    await db.getAllSettings(),
-    generateInvoiceNumber(client.last_name, client.first_name, date)
-  ];
+  const settings = await db.getAllSettings();
   const config = userConfig.getConfig();
 
-  const invoiceId = await db.createInvoice({
-    clientId: client.id, invoiceNumber, invoiceDate: date, totalAmount, lineItems,
-    paymentMethod: data.paymentMethod || 'paymentZelle',
-    invoiceType: data.invoiceType || 'lead',
-    createdBy: config?.user || 'braxton'
-  });
+  let invoiceNumber, invoiceId;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    invoiceNumber = generateInvoiceNumber(client.last_name, client.first_name, date);
+    try {
+      invoiceId = await db.createInvoice({
+        clientId: client.id, invoiceNumber, invoiceDate: date, totalAmount, lineItems,
+        paymentMethod: data.paymentMethod || 'paymentZelle',
+        invoiceType: data.invoiceType || 'lead',
+        createdBy: config?.user || 'braxton'
+      });
+      break;
+    } catch (err) {
+      if (err?.code === '23505' && attempt < 4) continue;
+      throw err;
+    }
+  }
 
-  const clientFolderName = `${client.last_name}, ${client.first_name}`.replace(/[^a-zA-Z0-9, ]/g, '');
+  const clientFolderName = `${client.last_name}, ${client.first_name}`.replace(/[^\p{L}\p{N}, ]/gu, '');
   const clientFolder = path.join(saveFolder, clientFolderName);
   fs.mkdirSync(clientFolder, { recursive: true });
   const pdfPath = path.join(clientFolder, `${invoiceNumber}.pdf`);
@@ -72,7 +79,7 @@ async function generatePaidPDF({ invoiceId, saveFolder }) {
   if (!invoice) throw new Error('Invoice not found');
 
   const client = { first_name: invoice.first_name, last_name: invoice.last_name, email: invoice.email, phone: invoice.phone };
-  const clientFolderName = `${invoice.last_name}, ${invoice.first_name}`.replace(/[^a-zA-Z0-9, ]/g, '');
+  const clientFolderName = `${invoice.last_name}, ${invoice.first_name}`.replace(/[^\p{L}\p{N}, ]/gu, '');
   const clientFolder = path.join(saveFolder, clientFolderName);
   fs.mkdirSync(clientFolder, { recursive: true });
   const pdfPath = path.join(clientFolder, `${invoice.invoice_number}-paid.pdf`);
@@ -94,7 +101,7 @@ async function regenerateInvoicePDF(invoiceId, saveFolder) {
   if (!invoice) throw new Error('Invoice not found');
 
   const client = { first_name: invoice.first_name, last_name: invoice.last_name, email: invoice.email, phone: invoice.phone };
-  const clientFolderName = `${invoice.last_name}, ${invoice.first_name}`.replace(/[^a-zA-Z0-9, ]/g, '');
+  const clientFolderName = `${invoice.last_name}, ${invoice.first_name}`.replace(/[^\p{L}\p{N}, ]/gu, '');
   const clientFolder = path.join(saveFolder, clientFolderName);
   fs.mkdirSync(clientFolder, { recursive: true });
   const suffix = invoice.paid ? '-paid' : '';
@@ -159,7 +166,7 @@ async function generatePayStub(data) {
     const ytdTotal = await dbContractors.getContractorYtd(contractor.id, year);
 
     const stubNumber = generatePayStubNumber(contractor.legal_name, payment.payDate);
-    const folderName = contractor.legal_name.replace(/[^a-zA-Z0-9 ]/g, '').trim().slice(0, 40);
+    const folderName = contractor.legal_name.replace(/[^\p{L}\p{N} ]/gu, '').trim().slice(0, 40);
     const contractorFolder = path.join(saveFolder, folderName);
     fs.mkdirSync(contractorFolder, { recursive: true });
     const pdfPath = path.join(contractorFolder, `${stubNumber}.pdf`);

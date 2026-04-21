@@ -31,9 +31,18 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+#drag-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 28px;
+  -webkit-app-region: drag;
+  z-index: 1000;
+}
+
 #app {
   display: flex;
-  height: 100vh;
+  height: calc(100vh - 28px);
+  margin-top: 28px;
 }
 
 /* Sidebar */
@@ -45,6 +54,7 @@ body {
   display: flex;
   flex-direction: column;
   padding: 24px 0;
+  -webkit-app-region: drag;
 }
 
 .sidebar-logo {
@@ -70,6 +80,7 @@ body {
   font-size: 14px;
   font-weight: 500;
   transition: all 0.15s;
+  -webkit-app-region: no-drag;
 }
 
 .nav-link svg { width: 18px; height: 18px; flex-shrink: 0; }
@@ -345,7 +356,7 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 /* Lead item fields (shown when checkbox checked) */
 .lead-fields {
   display: none;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
   padding: 12px;
   background: var(--dark);
