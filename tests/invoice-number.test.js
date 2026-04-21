@@ -1,4 +1,4 @@
-const { generateInvoiceNumber } = require('../src/invoice-number');
+const { generateInvoiceNumber, generatePayStubNumber } = require('../src/invoice-number');
 
 const FORMAT = /^INV-\d{4}-\d{4}-[A-Z0-9]{4}[A-Z0-9]-\d{6}$/;
 
@@ -42,8 +42,6 @@ test('generates unique numbers on repeated calls', () => {
 });
 
 // Pay Stub Number tests
-const { generatePayStubNumber } = require('../src/invoice-number');
-
 const PS_FORMAT = /^PS-\d{4}-\d{4}-[A-Z0-9]{4}-\d{6}$/;
 
 test('generatePayStubNumber generates correct format', () => {

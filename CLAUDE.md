@@ -10,7 +10,7 @@ An Electron desktop app for Fuego Leadz LLC to manage ad leads clients, generate
 
 ## Tech Stack
 - Electron 28 (desktop shell)
-- better-sqlite3 (local database)
+- Supabase (PostgreSQL via @supabase/supabase-js v2 — remote DB)
 - Nodemailer (email via Gmail SMTP + App Password)
 - Chart.js (analytics, loaded from CDN)
 - Vanilla JS/HTML/CSS (no framework)
@@ -19,13 +19,15 @@ An Electron desktop app for Fuego Leadz LLC to manage ad leads clients, generate
 ## Architecture
 - **main.js** — Electron main process, all IPC handlers (db, pdf, mail, settings, dialog)
 - **preload.js** — contextBridge exposing window.api to renderer
-- **src/db.js** — SQLite schema + all queries
+- **src/db.js** — Supabase queries for clients, invoices
+- **src/db-contractors.js** — Supabase queries for contractors and contractor_payments
 - **src/pdf-generator.js** — renders hidden BrowserWindow, calls printToPDF
 - **src/mailer.js** — Nodemailer email + PDF attachment
-- **src/invoice-number.js** — INV-YYYY-MMDD-LASTF-SEQ format
+- **src/invoice-number.js** — INV and PS number generators
 - **renderer/app.js** — screen router (navigate(screenName, params))
-- **renderer/screens/** — clients, create-invoice, dashboard, settings
+- **renderer/screens/** — clients, create-invoice, bulk-invoice, contractors, dashboard, settings
 - **renderer/invoice-template/template.html** — standalone HTML rendered to PDF
+- **renderer/pay-stub-template/template.html** — corporate white pay stub rendered to PDF
 
 ## Lead Products
 1. Trucker IUL Leads
@@ -33,13 +35,15 @@ An Electron desktop app for Fuego Leadz LLC to manage ad leads clients, generate
 3. Widow of Veteran Leads
 
 ## Invoice Number Format
-`INV-YYYY-MMDD-[LAST4][FIRST_INITIAL]-[SEQ3]`
-Example: `INV-2026-0419-SMITJ-001`
-Sequence is per-client (resets at 1 for each new client).
+`INV-YYYY-MMDD-[LAST4][FIRST_INITIAL]-[6RANDOM]`
+Example: `INV-2026-0419-SMITJ-847392`
+
+## Pay Stub Number Format
+`PS-YYYY-MMDD-[FIRST4]-[6RANDOM]` (FIRST4 = first 4 chars of contractor's first word)
+Example: `PS-2026-0420-SANT-847392`
 
 ## Data Storage
-SQLite at `app.getPath('userData')/fuego-leadz.db`
-Tables: clients, invoices, invoice_line_items, settings
+Supabase (PostgreSQL). Tables: clients, invoices, invoice_line_items, settings, contractors, contractor_payments
 
 ## Status Badge Logic
 - Green "Up to Date" — last invoice < 6 days ago
