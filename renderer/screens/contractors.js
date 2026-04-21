@@ -278,10 +278,10 @@ export async function contractorsScreen(container) {
         </div>
         ${payments.map(p => `
           <div style="display:grid;grid-template-columns:90px 1fr 60px 60px 90px 80px;gap:6px;padding:10px 12px;border-top:1px solid var(--border);align-items:center;font-size:12px">
-            <span style="color:var(--text-muted)">${p.pay_date}</span>
+            <span style="color:var(--text-muted)">${esc(p.pay_date)}</span>
             <span title="${esc(p.description)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.description)}</span>
-            <span style="text-align:center;color:var(--text-muted)">${p.hours}</span>
-            <span style="text-align:right;color:var(--text-muted)">$${p.hourly_rate}</span>
+            <span style="text-align:center;color:var(--text-muted)">${esc(String(p.hours))}</span>
+            <span style="text-align:right;color:var(--text-muted)">$${esc(String(p.hourly_rate))}</span>
             <span style="text-align:right;font-weight:600">${fmt(p.total_amount)}</span>
             <div style="display:flex;gap:4px;justify-content:center">
               <button class="btn btn-ghost" style="padding:2px 7px;font-size:11px" data-action="editPayment" data-idx="${idx}" data-pid="${esc(p.id)}" data-pdata="${esc(JSON.stringify(p))}">Edit</button>
@@ -301,7 +301,7 @@ export async function contractorsScreen(container) {
       btn.addEventListener('click', async () => {
         const action = btn.dataset.action;
         if (action === 'downloadStub') {
-          window.api.shell.openPath(btn.dataset.path);
+          await window.api.shell.openPath(btn.dataset.path);
         } else if (action === 'editPayment') {
           const pData = JSON.parse(btn.dataset.pdata);
           const logSection = document.getElementById(`logPaymentSection${idx}`);
@@ -429,8 +429,13 @@ export async function contractorsScreen(container) {
         const isOpen = sec.style.display !== 'none';
         document.getElementById(`historySection${idx}`).style.display = 'none';
         document.getElementById(`editSection${idx}`).style.display = 'none';
-        sec.style.display = isOpen ? 'none' : 'block';
-        if (!isOpen) wirePaymentFormEvents(c, idx);
+        if (isOpen) {
+          sec.style.display = 'none';
+        } else {
+          sec.innerHTML = renderLogPaymentForm(c, idx);
+          sec.style.display = 'block';
+          wirePaymentFormEvents(c, idx);
+        }
 
       } else if (action === 'history') {
         const sec = document.getElementById(`historySection${idx}`);
@@ -497,6 +502,7 @@ export async function contractorsScreen(container) {
           const histSec = document.getElementById(`historySection${idx}`);
           if (histSec.style.display !== 'none') await loadHistory(c, idx);
           contractors = await window.api.db.getContractors();
+          renderScreen();
         } catch (err) {
           showToast('Error: ' + err.message, 'error');
         }
