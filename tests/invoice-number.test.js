@@ -40,3 +40,42 @@ test('generates unique numbers on repeated calls', () => {
   );
   expect(nums.size).toBeGreaterThan(1);
 });
+
+// Pay Stub Number tests
+const { generatePayStubNumber } = require('../src/invoice-number');
+
+const PS_FORMAT = /^PS-\d{4}-\d{4}-[A-Z0-9]{4}-\d{6}$/;
+
+test('generatePayStubNumber generates correct format', () => {
+  const num = generatePayStubNumber('Maria Santos', '2026-04-20');
+  expect(num).toMatch(PS_FORMAT);
+});
+
+test('generatePayStubNumber uses first 4 chars of cleaned first word', () => {
+  const num = generatePayStubNumber('Santos Maria', '2026-04-20');
+  expect(num).toContain('SANT');
+});
+
+test('generatePayStubNumber pads short names', () => {
+  const num = generatePayStubNumber('Li Bo', '2026-04-20');
+  expect(num).toContain('LI00');
+});
+
+test('generatePayStubNumber strips special characters', () => {
+  const num = generatePayStubNumber("O'Brien LLC", '2026-04-20');
+  expect(num).toContain('OBRI');
+});
+
+test('generatePayStubNumber random suffix is 6 digits', () => {
+  const num = generatePayStubNumber('Maria Santos', '2026-04-20');
+  const rand = Number(num.split('-').pop());
+  expect(rand).toBeGreaterThanOrEqual(100000);
+  expect(rand).toBeLessThanOrEqual(999999);
+});
+
+test('generatePayStubNumber generates unique numbers', () => {
+  const nums = new Set(
+    Array.from({ length: 20 }, () => generatePayStubNumber('Maria Santos', '2026-04-20'))
+  );
+  expect(nums.size).toBeGreaterThan(1);
+});
