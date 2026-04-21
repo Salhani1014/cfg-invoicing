@@ -39,7 +39,24 @@ app.whenReady().then(() => {
   // Auto-updater (checks GitHub releases on launch)
   try {
     const { autoUpdater } = require('electron-updater');
-    autoUpdater.checkForUpdatesAndNotify();
+    autoUpdater.logger = null;
+
+    autoUpdater.on('update-available', info => {
+      mainWindow?.webContents.send('update-available', {
+        version: info.version,
+        releaseNotes: info.releaseNotes || ''
+      });
+    });
+
+    autoUpdater.on('update-downloaded', () => {
+      mainWindow?.webContents.send('update-downloaded');
+    });
+
+    autoUpdater.on('error', err => {
+      console.error('[updater]', err.message);
+    });
+
+    autoUpdater.checkForUpdates();
   } catch (_) {}
 
   // Auto-send overdue reminders 5 seconds after launch
@@ -106,6 +123,9 @@ ipcMain.handle('dialog:selectFolder', async () => {
 });
 ipcMain.handle('shell:openPath',     (_, p)   => shell.openPath(p));
 ipcMain.handle('shell:openExternal', (_, url) => shell.openExternal(url));
+ipcMain.handle('autoUpdater:install', () => {
+  try { require('electron-updater').autoUpdater.quitAndInstall(); } catch (_) {}
+});
 
 const { generateInvoicePDF, generatePaidPDF, regenerateInvoicePDF, generatePayStub, generateYearEndSummaryPDF } = require('./src/pdf-generator');
 const { sendInvoiceEmail, sendPaidReceipt, sendReminderEmail, testConnection, sendPayStub } = require('./src/mailer');
