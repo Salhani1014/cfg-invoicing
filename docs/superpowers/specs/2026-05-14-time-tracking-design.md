@@ -242,8 +242,9 @@ New preload methods on `window.api.timeTracking.*`.
 `/api/cron/poll-unifi` — runs every 60s via `vercel.json` cron config.
 
 ```
-1. Fetch UniFi Site Manager API: GET /v1/sites/{siteId}/clients
-2. Build map: { mac → { connected: true, hostname, last_seen } }
+1. Fetch UniFi Network Integration API:
+   GET {UNIFI_BASE_URL}/proxy/network/integration/v1/sites/{UNIFI_SITE_ID}/clients?limit=500
+2. Build map: { mac → { connected: true, name, connectedAt } }  (uses data[].macAddress, data[].name)
 3. SELECT all rows from tt_client_snapshot.
 4. For each MAC in either set:
    - If was connected and now isn't → INSERT tt_wifi_events (disconnect)
@@ -252,7 +253,12 @@ New preload methods on `window.api.timeTracking.*`.
 5. UPSERT tt_client_snapshot rows.
 ```
 
-UniFi auth: bearer token from `UNIFI_API_KEY` env var. Create at unifi.ui.com → Settings → Control Plane → Integrations → API.
+**UniFi auth & endpoint (confirmed 2026-05-14 against the live controller):**
+- The high-level Site Manager API at `api.ui.com` does NOT expose connected-clients lists — it only gives site/host summaries.
+- We use the **UniFi Network application's Integration API** via the controller's direct-connect URL: `https://<hash>.id.ui.direct`.
+- API key is created INSIDE the Network app (Settings → Control Plane → Integrations → "Create New API Key") — a different key than the account-level Site Manager key.
+- Header: `X-API-KEY: <token>` (Bearer auth is rejected with 401).
+- Response is paginated (`{offset, limit, count, totalCount, data: [...]}`) — pass `?limit=500` to cover any plausible client count; revisit if `totalCount > 500`.
 
 Failure handling: log to Vercel + write a `tt_poll_errors` row (cheap diagnostic). Don't retry within a single tick — next tick re-converges.
 
@@ -275,15 +281,17 @@ Admin recipients: configurable list in env (`ADMIN_ALERT_PHONES` — comma-separ
 ## 8. Environment & Secrets
 
 **Vercel env:**
-- `SUPABASE_URL` — same as CFG Invoicing
-- `SUPABASE_ANON_KEY` — for client-side
+- `NEXT_PUBLIC_SUPABASE_URL` — same as CFG Invoicing
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — for client-side
 - `SUPABASE_SERVICE_ROLE_KEY` — for cron/server routes
-- `UNIFI_API_KEY` — Site Manager bearer token
-- `UNIFI_SITE_ID` — the site UUID to poll
-- `OFFICE_PUBLIC_IP` — for the bootstrap IP check during device binding
+- `UNIFI_API_KEY` — Network app integration key (X-API-KEY header)
+- `UNIFI_BASE_URL` — controller direct-connect URL: `https://a89c6c963b8809c97570a54b6c7069674183.id.ui.direct`
+- `UNIFI_SITE_ID` — Network app site UUID: `88f7af54-98f8-306a-a1c7-c9349722b1f6` (NOT the Site Manager UUID)
+- `OFFICE_PUBLIC_IPS` — comma-separated list (dual WAN: `108.191.128.175,162.230.108.237` — Spectrum primary + AT&T failover)
 - `GHL_API_KEY` — master key from existing GHL setup
 - `GHL_LOCATION_ID` — wherever the admin SMS should originate
 - `ADMIN_ALERT_PHONES` — comma-separated E.164
+- `CRON_SECRET` — random 32+ char string for cron auth
 
 **CFG Invoicing env (Electron):** none new — the existing `SUPABASE_URL` and anon key cover it. The new tab uses the same Supabase client, just with additional table access.
 

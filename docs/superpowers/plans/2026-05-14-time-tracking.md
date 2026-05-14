@@ -401,8 +401,8 @@ const Schema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
   UNIFI_API_KEY: z.string().min(10),
   UNIFI_SITE_ID: z.string().min(1),
-  UNIFI_BASE_URL: z.string().url().default('https://api.ui.com'),
-  OFFICE_PUBLIC_IP: z.string().min(7),
+  UNIFI_BASE_URL: z.string().url(),  // direct-connect URL of the controller
+  OFFICE_PUBLIC_IPS: z.string().min(7),  // comma-separated (dual-WAN)
   GHL_API_KEY: z.string().min(10),
   GHL_LOCATION_ID: z.string().min(1),
   ADMIN_ALERT_PHONES: z.string().min(7), // comma-separated E.164
@@ -413,6 +413,9 @@ export const env = Schema.parse(process.env);
 
 export const adminAlertPhones = (): string[] =>
   env.ADMIN_ALERT_PHONES.split(',').map(p => p.trim()).filter(Boolean);
+
+export const officePublicIps = (): string[] =>
+  env.OFFICE_PUBLIC_IPS.split(',').map(p => p.trim()).filter(Boolean);
 ```
 
 - [ ] **Step 2: Write `.env.local.example`**
@@ -421,14 +424,14 @@ export const adminAlertPhones = (): string[] =>
 NEXT_PUBLIC_SUPABASE_URL=https://wbzdayezlwqslfcnvcjc.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-UNIFI_API_KEY=
-UNIFI_SITE_ID=
-UNIFI_BASE_URL=https://api.ui.com
-OFFICE_PUBLIC_IP=
+UNIFI_API_KEY=                            # Network app integration key (NOT Site Manager key)
+UNIFI_SITE_ID=88f7af54-98f8-306a-a1c7-c9349722b1f6
+UNIFI_BASE_URL=https://a89c6c963b8809c97570a54b6c7069674183.id.ui.direct
+OFFICE_PUBLIC_IPS=108.191.128.175,162.230.108.237   # Spectrum primary + AT&T failover
 GHL_API_KEY=
 GHL_LOCATION_ID=
 ADMIN_ALERT_PHONES=+1XXXXXXXXXX
-CRON_SECRET=
+CRON_SECRET=                              # openssl rand -hex 32
 ```
 
 - [ ] **Step 3: Commit**
@@ -531,25 +534,29 @@ describe('listConnectedClients', () => {
     vi.stubGlobal('fetch', vi.fn());
     vi.stubEnv('UNIFI_API_KEY', 'test-key');
     vi.stubEnv('UNIFI_SITE_ID', 'site-1');
-    vi.stubEnv('UNIFI_BASE_URL', 'https://api.test');
+    vi.stubEnv('UNIFI_BASE_URL', 'https://controller.test');
   });
 
-  it('returns mapped clients on 200', async () => {
+  it('returns mapped clients on 200 (real Network Integration API shape)', async () => {
     (globalThis.fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
+        offset: 0, limit: 500, count: 2, totalCount: 2,
         data: [
-          { mac: 'AA:BB:CC:DD:EE:01', hostname: 'iPhone-15', last_seen: 1715000000 },
-          { mac: 'AA:BB:CC:DD:EE:02', hostname: 'MacBook',   last_seen: 1715000005 },
+          { type: 'WIRELESS', macAddress: 'AA:BB:CC:DD:EE:01', name: 'iPhone-15', connectedAt: '2026-05-14T15:00:00Z' },
+          { type: 'WIRED',    macAddress: 'AA:BB:CC:DD:EE:02', name: 'NAS',       connectedAt: '2026-05-01T10:00:00Z' },
         ],
       }),
     });
 
     const out = await listConnectedClients();
     expect(out).toEqual([
-      { mac: 'aa:bb:cc:dd:ee:01', hostname: 'iPhone-15', lastSeenAt: new Date(1715000000 * 1000) },
-      { mac: 'aa:bb:cc:dd:ee:02', hostname: 'MacBook',   lastSeenAt: new Date(1715000005 * 1000) },
+      { mac: 'aa:bb:cc:dd:ee:01', hostname: 'iPhone-15', lastSeenAt: new Date('2026-05-14T15:00:00Z') },
+      { mac: 'aa:bb:cc:dd:ee:02', hostname: 'NAS',       lastSeenAt: new Date('2026-05-01T10:00:00Z') },
     ]);
+    const [url, init] = (globalThis.fetch as any).mock.calls[0];
+    expect(url).toBe('https://controller.test/proxy/network/integration/v1/sites/site-1/clients?limit=500');
+    expect(init.headers['X-API-KEY']).toBe('test-key');
   });
 
   it('throws on non-ok response', async () => {
@@ -584,8 +591,15 @@ export function normalizeMac(mac: string): string {
   return mac.toLowerCase().replace(/[^0-9a-f]/g, '').match(/.{2}/g)!.join(':');
 }
 
+type ApiClient = {
+  type?: string;
+  macAddress: string;
+  name?: string | null;
+  connectedAt?: string;
+};
+
 export async function listConnectedClients(): Promise<UnifiClient[]> {
-  const url = `${env.UNIFI_BASE_URL}/ea/sites/${env.UNIFI_SITE_ID}/clients`;
+  const url = `${env.UNIFI_BASE_URL}/proxy/network/integration/v1/sites/${env.UNIFI_SITE_ID}/clients?limit=500`;
   const res = await fetch(url, {
     headers: { 'X-API-KEY': env.UNIFI_API_KEY, Accept: 'application/json' },
     cache: 'no-store',
@@ -594,11 +608,11 @@ export async function listConnectedClients(): Promise<UnifiClient[]> {
     const body = await res.text().catch(() => '');
     throw new Error(`unifi listClients failed ${res.status}: ${body.slice(0, 200)}`);
   }
-  const json = await res.json() as { data: Array<{ mac: string; hostname?: string; last_seen?: number }> };
+  const json = await res.json() as { data?: ApiClient[]; totalCount?: number };
   return (json.data ?? []).map(c => ({
-    mac: normalizeMac(c.mac),
-    hostname: c.hostname ?? null,
-    lastSeenAt: new Date((c.last_seen ?? 0) * 1000),
+    mac: normalizeMac(c.macAddress),
+    hostname: c.name ?? null,
+    lastSeenAt: c.connectedAt ? new Date(c.connectedAt) : new Date(0),
   }));
 }
 
@@ -625,7 +639,7 @@ git add src/lib/unifi.ts src/tests/unifi.test.ts
 git commit -m "feat(unifi): Site Manager client wrapper"
 ```
 
-> **Note for executor:** If the live API responds with a different shape (e.g. `last_seen` ISO string instead of unix-seconds, or path `/v1/sites/...` instead of `/ea/sites/...`), `WebFetch` https://developer.ui.com/site-manager-api/ to confirm and adjust both the implementation and the test fixture. Don't ship a wrapper that doesn't match production.
+> **Endpoint confirmed live 2026-05-14:** path, `X-API-KEY` header, and response shape (`{data: [{macAddress, name, connectedAt}], totalCount}`) were verified against the actual CFG controller. If `totalCount > 500` ever appears, add pagination (`?offset=` loops).
 
 ### Task 2.4: GHL SMS wrapper — failing tests first
 
@@ -1202,7 +1216,7 @@ import { z } from 'zod';
 import { supabaseServer } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { listConnectedClients, normalizeMac, type UnifiClient } from '@/lib/unifi';
-import { env } from '@/lib/env';
+import { env, officePublicIps } from '@/lib/env';
 
 export const runtime = 'nodejs';
 
@@ -1220,10 +1234,15 @@ function clientIp(req: Request): string | null {
   return h.get('x-real-ip');
 }
 
+function isOfficeIp(ip: string | null): boolean {
+  if (!ip) return false;
+  return officePublicIps().includes(ip);
+}
+
 // GET = list candidate devices for binding
 export async function GET(req: Request) {
   const ip = clientIp(req);
-  if (ip !== env.OFFICE_PUBLIC_IP) {
+  if (!isOfficeIp(ip)) {
     return NextResponse.json({ ok: false, error: 'not_on_office_network', ip }, { status: 403 });
   }
 
@@ -1248,7 +1267,7 @@ const BindBody = z.object({ mac: z.string().min(11) });
 
 export async function POST(req: Request) {
   const ip = clientIp(req);
-  if (ip !== env.OFFICE_PUBLIC_IP) {
+  if (!isOfficeIp(ip)) {
     return NextResponse.json({ ok: false, error: 'not_on_office_network' }, { status: 403 });
   }
 
@@ -1780,13 +1799,13 @@ When prompted, create a new project named `checkmate-clockin`, scope to your tea
 For each value, paste from Task 0.1 and your existing GHL/Supabase configs:
 
 ```bash
-npx vercel env add NEXT_PUBLIC_SUPABASE_URL          production
+npx vercel env add NEXT_PUBLIC_SUPABASE_URL          production   # https://wbzdayezlwqslfcnvcjc.supabase.co
 npx vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY     production
 npx vercel env add SUPABASE_SERVICE_ROLE_KEY         production
-npx vercel env add UNIFI_API_KEY                     production
-npx vercel env add UNIFI_SITE_ID                     production
-npx vercel env add UNIFI_BASE_URL                    production   # https://api.ui.com
-npx vercel env add OFFICE_PUBLIC_IP                  production
+npx vercel env add UNIFI_API_KEY                     production   # Network app integration key
+npx vercel env add UNIFI_SITE_ID                     production   # 88f7af54-98f8-306a-a1c7-c9349722b1f6
+npx vercel env add UNIFI_BASE_URL                    production   # https://a89c6c963b8809c97570a54b6c7069674183.id.ui.direct
+npx vercel env add OFFICE_PUBLIC_IPS                 production   # 108.191.128.175,162.230.108.237
 npx vercel env add GHL_API_KEY                       production
 npx vercel env add GHL_LOCATION_ID                   production
 npx vercel env add ADMIN_ALERT_PHONES                production   # +1XXXXXXXXXX,+1YYYYYYYYYY
