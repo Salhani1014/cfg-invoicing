@@ -14,13 +14,31 @@ const TAX_CLASSIFICATIONS = [
 
 export async function contractorsScreen(container) {
   let contractors = await window.api.db.getContractors();
+  let sortKey = 'name-az';
+  let sortedView = [];
+
+  const SORTS = {
+    'name-az':   { label: 'Name A→Z',       fn: (a, b) => (a.legal_name || '').localeCompare(b.legal_name || '') },
+    'name-za':   { label: 'Name Z→A',       fn: (a, b) => (b.legal_name || '').localeCompare(a.legal_name || '') },
+    'ytd-desc':  { label: 'YTD High→Low',   fn: (a, b) => Number(b.ytd_total || 0) - Number(a.ytd_total || 0) },
+    'ytd-asc':   { label: 'YTD Low→High',   fn: (a, b) => Number(a.ytd_total || 0) - Number(b.ytd_total || 0) },
+    'w9-first':  { label: 'W-9 Missing First', fn: (a, b) => (a.w9_on_file === b.w9_on_file ? 0 : a.w9_on_file ? 1 : -1) },
+  };
+
+  function rebuildSorted() {
+    sortedView = [...contractors].sort(SORTS[sortKey].fn);
+  }
 
   function renderScreen() {
+    rebuildSorted();
     const year = new Date().getFullYear();
     container.innerHTML = `
       <div class="page-header" style="display:flex;justify-content:space-between;align-items:center">
         <h1 class="page-title">Contractors</h1>
-        <div style="display:flex;gap:10px">
+        <div style="display:flex;gap:10px;align-items:center">
+          <select id="contractorSort" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer">
+            ${Object.entries(SORTS).map(([k, s]) => `<option value="${k}" ${sortKey === k ? 'selected' : ''}>${s.label}</option>`).join('')}
+          </select>
           <button class="btn btn-ghost" id="toggleExportBtn">Export Payments</button>
           <button class="btn btn-primary" id="toggleAddBtn">+ Add Contractor</button>
         </div>
@@ -39,7 +57,7 @@ export async function contractorsScreen(container) {
             <label class="form-label">Contractor</label>
             <select class="form-select" id="exportContractor">
               <option value="">All Contractors</option>
-              ${contractors.map(c => `<option value="${esc(c.id)}">${esc(c.legal_name)}</option>`).join('')}
+              ${[...contractors].sort((a, b) => (a.legal_name || '').localeCompare(b.legal_name || '')).map(c => `<option value="${esc(c.id)}">${esc(c.legal_name)}</option>`).join('')}
             </select>
           </div>
           <div>
@@ -65,7 +83,7 @@ export async function contractorsScreen(container) {
       <div id="contractorList">
         ${contractors.length === 0
           ? '<div class="empty-state"><h3>No contractors yet</h3><p>Add a contractor to get started.</p></div>'
-          : contractors.map((c, idx) => renderContractorCard(c, idx)).join('')
+          : sortedView.map((c, idx) => renderContractorCard(c, idx)).join('')
         }
       </div>
     `;
@@ -381,6 +399,7 @@ export async function contractorsScreen(container) {
         await window.api.db.addContractor(data);
         showToast('Contractor added.', 'success');
         contractors = await window.api.db.getContractors();
+        rebuildSorted();
         renderScreen();
       } catch (err) {
         showToast('Error: ' + err.message, 'error');
@@ -417,12 +436,19 @@ export async function contractorsScreen(container) {
       }
     });
 
+    const sortSel = document.getElementById('contractorSort');
+    if (sortSel) sortSel.addEventListener('change', (e) => {
+      sortKey = e.target.value;
+      rebuildSorted();
+      renderScreen();
+    });
+
     document.getElementById('contractorList').addEventListener('click', async e => {
       const btn = e.target.closest('[data-action]');
       if (!btn) return;
       const action = btn.dataset.action;
       const idx = btn.dataset.idx !== undefined ? Number(btn.dataset.idx) : null;
-      const c = idx !== null ? contractors[idx] : null;
+      const c = idx !== null ? sortedView[idx] : null;
 
       if (action === 'log') {
         const sec = document.getElementById(`logPaymentSection${idx}`);

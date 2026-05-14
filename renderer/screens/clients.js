@@ -1,4 +1,17 @@
 export async function clientsScreen(container) {
+  let sortBy = 'name';
+  let sortDir = 'asc';
+  let searchQuery = '';
+
+  const SORTABLE = {
+    name:    { label: 'Name',         get: c => `${c.last_name || ''} ${c.first_name || ''}`.toLowerCase() },
+    email:   { label: 'Email',        get: c => (c.email || '').toLowerCase() },
+    phone:   { label: 'Phone',        get: c => (c.phone || '').toLowerCase() },
+    lastInv: { label: 'Last Invoice', get: c => c.last_invoice_date || '' },
+    balance: { label: 'Balance Due',  get: c => Number(c.total_unpaid || 0) },
+    status:  { label: 'Status',       get: c => getScheduleStatus(c).label },
+  };
+
   container.innerHTML = `
     <div class="page-header">
       <h1 class="page-title">Clients</h1>
@@ -11,15 +24,7 @@ export async function clientsScreen(container) {
       <div class="table-wrap">
         <table id="clientTable">
           <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Phone</th>
-              <th>Last Invoice</th>
-              <th>Balance Due</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
+            <tr id="clientHead"></tr>
           </thead>
           <tbody id="clientBody"></tbody>
         </table>
@@ -28,22 +33,55 @@ export async function clientsScreen(container) {
   `;
 
   let clients = await window.api.db.getClients();
-  renderTable(clients);
+  renderAll();
 
   document.getElementById('clientSearch').addEventListener('input', (e) => {
-    const q = e.target.value.toLowerCase();
-    const filtered = clients.filter(c =>
-      `${c.first_name} ${c.last_name} ${c.email}`.toLowerCase().includes(q)
-    );
-    renderTable(filtered);
+    searchQuery = e.target.value.toLowerCase();
+    renderAll();
   });
 
   document.getElementById('addClientBtn').addEventListener('click', () => {
     openClientModal(null, async () => {
       clients = await window.api.db.getClients();
-      renderTable(clients);
+      renderAll();
     });
   });
+
+  function renderHeader() {
+    const head = document.getElementById('clientHead');
+    const arrow = key => sortBy === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    head.innerHTML = Object.entries(SORTABLE).map(([k, def]) =>
+      `<th data-sort="${k}" style="cursor:pointer;user-select:none">${def.label}${arrow(k)}</th>`
+    ).join('') + '<th></th>';
+    head.querySelectorAll('[data-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        const k = th.dataset.sort;
+        if (sortBy === k) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+        else { sortBy = k; sortDir = 'asc'; }
+        renderAll();
+      });
+    });
+  }
+
+  function getFilteredSorted() {
+    const q = searchQuery;
+    const filtered = q
+      ? clients.filter(c => `${c.first_name} ${c.last_name} ${c.email} ${c.phone || ''}`.toLowerCase().includes(q))
+      : [...clients];
+    const def = SORTABLE[sortBy];
+    filtered.sort((a, b) => {
+      const av = def.get(a), bv = def.get(b);
+      if (typeof av === 'number' && typeof bv === 'number') return av - bv;
+      return String(av).localeCompare(String(bv));
+    });
+    if (sortDir === 'desc') filtered.reverse();
+    return filtered;
+  }
+
+  function renderAll() {
+    renderHeader();
+    renderTable(getFilteredSorted());
+  }
 
   function getScheduleStatus(c) {
     if (!c.last_invoice_date) return { label: 'No Invoice', cls: 'badge-red' };
@@ -78,11 +116,13 @@ export async function clientsScreen(container) {
         ? `<span style="color:var(--red);font-weight:700">${fmtAmt(c.total_unpaid)}</span>${isOverdue ? ' <span class="badge badge-red" style="font-size:10px;padding:1px 6px">Overdue</span>' : ''}`
         : `<span style="color:var(--text-muted)">—</span>`;
 
+      const phoneCell = c.phone ? esc(c.phone) : '<span style="color:var(--text-muted)">—</span>';
+      const emailCell = c.email ? esc(c.email) : '<span style="color:var(--text-muted)">—</span>';
       return `
         <tr>
           <td><strong>${esc(c.first_name)} ${esc(c.last_name)}</strong></td>
-          <td style="color:var(--text-muted)">${esc(c.email)}</td>
-          <td style="color:var(--text-muted)">${esc(c.phone)}</td>
+          <td style="color:var(--text-muted)">${emailCell}</td>
+          <td style="color:var(--text-muted)">${phoneCell}</td>
           <td style="color:var(--text-muted)">${formatDate(c.last_invoice_date)}</td>
           <td>${balanceCell}</td>
           <td><span class="badge ${status.cls}">${status.label}</span></td>
@@ -129,7 +169,7 @@ export async function clientsScreen(container) {
     overlay.innerHTML = `
       <div class="modal" style="max-width:720px;width:92vw">
         <h2 class="modal-title">Invoice History — ${esc(client.first_name)} ${esc(client.last_name)}</h2>
-        <div style="margin-bottom:14px;font-size:13px;color:var(--text-muted)">${esc(client.email)} · ${esc(client.phone)}</div>
+        <div style="margin-bottom:14px;font-size:13px;color:var(--text-muted)">${esc(client.email)}${client.phone ? ' · ' + esc(client.phone) : ''}</div>
         <div class="table-wrap" style="max-height:420px;overflow-y:auto">
           <table>
             <thead>
@@ -202,8 +242,8 @@ function openClientModal(existing, onSave) {
         <input class="form-input" id="mEmail" type="email" value="${isEdit ? esc(existing.email) : ''}">
       </div>
       <div class="form-group">
-        <label class="form-label">Phone</label>
-        <input class="form-input" id="mPhone" value="${isEdit ? esc(existing.phone) : ''}">
+        <label class="form-label">Phone <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
+        <input class="form-input" id="mPhone" value="${isEdit ? esc(existing.phone || '') : ''}">
       </div>
       <div id="formError" style="color:var(--red);font-size:13px;margin-top:-8px;margin-bottom:8px;display:none"></div>
       <div class="modal-actions">
@@ -228,7 +268,6 @@ function openClientModal(existing, onSave) {
     const err = overlay.querySelector('#formError');
     if (!data.firstName || !data.lastName) { err.textContent = 'First and last name are required.'; err.style.display='block'; return; }
     if (!data.email.includes('@')) { err.textContent = 'Please enter a valid email.'; err.style.display='block'; return; }
-    if (!data.phone) { err.textContent = 'Phone number is required.'; err.style.display='block'; return; }
 
     if (isEdit) {
       await window.api.db.updateClient(existing.id, data);

@@ -142,8 +142,7 @@
             <div class="bill-to-label">Bill To</div>
             <div class="bill-to-name">${esc(data.client.first_name)} ${esc(data.client.last_name)}</div>
             <div class="bill-to-detail">
-              ${esc(data.client.email)}<br>
-              ${esc(data.client.phone)}
+              ${esc(data.client.email)}${data.client.phone ? `<br>${esc(data.client.phone)}` : ''}
             </div>
           </div>
           ${dueBoxHtml}
