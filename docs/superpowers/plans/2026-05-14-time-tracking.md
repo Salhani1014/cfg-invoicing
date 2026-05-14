@@ -26,7 +26,7 @@ checkmate-clockin/
 ├── tsconfig.json
 ├── vitest.config.ts
 ├── vercel.json                       # cron config
-├── middleware.ts                     # auth gate + session refresh
+├── proxy.ts                          # auth gate + session refresh (Next.js 16 renamed middleware → proxy)
 ├── supabase/migrations/
 │   └── 20260514000000_time_tracking.sql
 ├── src/
@@ -944,19 +944,21 @@ git commit -m "feat(cron): UniFi poll + snapshot diff"
 
 ## Phase 4 — Auth (Supabase magic link)
 
-### Task 4.1: Middleware route-guard + session refresh
+### Task 4.1: Proxy route-guard + session refresh
 
 **Files:**
-- Create: `middleware.ts`
+- Create: `proxy.ts`
 
-- [ ] **Step 1: Write middleware**
+> **Next.js 16 note:** The file is `proxy.ts` (not `middleware.ts`) and the exported function is `proxy` (not `middleware`). Runtime is `nodejs` only; `edge` is not supported in `proxy`.
+
+- [ ] **Step 1: Write proxy**
 
 ```ts
-// middleware.ts (project root)
+// proxy.ts (project root)
 import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   let res = NextResponse.next({ request: req });
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -1006,8 +1008,8 @@ export const config = {
 - [ ] **Step 2: Commit**
 
 ```bash
-git add middleware.ts
-git commit -m "feat(auth): middleware route-guard + session refresh"
+git add proxy.ts
+git commit -m "feat(auth): proxy route-guard + session refresh"
 ```
 
 ### Task 4.2: Login page
