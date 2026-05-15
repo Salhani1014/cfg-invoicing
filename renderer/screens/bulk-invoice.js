@@ -11,10 +11,19 @@ const PAYMENT_METHODS = [
 ];
 
 export async function batchInvoiceScreen(container) {
-  const [clients, userCfg] = await Promise.all([
+  const [clientsRaw, userCfg] = await Promise.all([
     window.api.db.getClients(),
     window.api.userConfig.getConfig()
   ]);
+  // Sort clients alphabetically by last name (then first name) so the long
+  // batch list is scannable. Uses localeCompare for proper diacritic handling.
+  const clients = [...clientsRaw].sort((a, b) => {
+    const al = (a.last_name || '').toLowerCase();
+    const bl = (b.last_name || '').toLowerCase();
+    const cmp = al.localeCompare(bl);
+    if (cmp !== 0) return cmp;
+    return (a.first_name || '').toLowerCase().localeCompare((b.first_name || '').toLowerCase());
+  });
   const saveFolder = userCfg?.saveFolder;
 
   const today = new Date().toISOString().split('T')[0];
