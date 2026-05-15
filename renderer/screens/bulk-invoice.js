@@ -15,20 +15,24 @@ export async function batchInvoiceScreen(container) {
     window.api.db.getClients(),
     window.api.userConfig.getConfig()
   ]);
-  // Sort clients alphabetically by last name (then first name) so the long
-  // batch list is scannable. Uses localeCompare for proper diacritic handling.
-  const clients = [...clientsRaw].sort((a, b) => {
-    const al = (a.last_name || '').toLowerCase();
-    const bl = (b.last_name || '').toLowerCase();
-    const cmp = al.localeCompare(bl);
-    if (cmp !== 0) return cmp;
-    return (a.first_name || '').toLowerCase().localeCompare((b.first_name || '').toLowerCase());
-  });
   const saveFolder = userCfg?.saveFolder;
 
   const today = new Date().toISOString().split('T')[0];
   let invoiceMode = 'lead';
   let currentDate = today;
+  let sortKey = 'first_name'; // 'first_name' | 'last_name'
+
+  // Stable sorted view of clientsRaw. Locale-aware tiebreaker uses the other
+  // name (sort by first → ties broken by last, and vice versa).
+  function clients() {
+    const other = sortKey === 'first_name' ? 'last_name' : 'first_name';
+    return [...clientsRaw].sort((a, b) => {
+      const cmp = (a[sortKey] || '').toLowerCase().localeCompare((b[sortKey] || '').toLowerCase());
+      if (cmp !== 0) return cmp;
+      return (a[other] || '').toLowerCase().localeCompare((b[other] || '').toLowerCase());
+    });
+  }
+  const arrow = (key) => sortKey === key ? ' ↓' : '';
 
   function renderScreen() {
     const dateInput = document.getElementById('batchDate');
@@ -60,10 +64,21 @@ export async function batchInvoiceScreen(container) {
         <div id="progressItems" style="font-size:13px;color:var(--text-muted);line-height:1.8"></div>
       </div>
 
+      ${clientsRaw.length === 0 ? '' : `
+        <!-- Column headers — click to sort by First or Last Name -->
+        <div style="display:grid;grid-template-columns:auto 1fr 1fr 1.4fr auto;gap:12px;align-items:center;padding:6px 18px;margin-bottom:6px;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.5px">
+          <div style="width:18px"></div>
+          <button data-sort="first_name" class="sort-btn" style="background:transparent;border:none;color:${sortKey === 'first_name' ? 'var(--gold)' : 'var(--text-muted)'};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;padding:0;text-align:left">First Name${arrow('first_name')}</button>
+          <button data-sort="last_name" class="sort-btn" style="background:transparent;border:none;color:${sortKey === 'last_name' ? 'var(--gold)' : 'var(--text-muted)'};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;padding:0;text-align:left">Last Name${arrow('last_name')}</button>
+          <div>Email</div>
+          <div>Status</div>
+        </div>
+      `}
+
       <div id="clientList">
-        ${clients.length === 0
+        ${clientsRaw.length === 0
           ? '<div class="empty-state"><h3>No clients yet</h3><p>Add clients first from the Clients screen.</p></div>'
-          : clients.map((c, idx) => renderClientRow(c, idx)).join('')
+          : clients().map((c, idx) => renderClientRow(c, idx)).join('')
         }
       </div>
     `;
@@ -75,12 +90,11 @@ export async function batchInvoiceScreen(container) {
     const status = getStatus(c.last_invoice_date);
     return `
       <div class="card" id="batchRow${idx}" style="margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:12px">
+        <div style="display:grid;grid-template-columns:auto 1fr 1fr 1.4fr auto;gap:12px;align-items:center">
           <input type="checkbox" id="batchCheck${idx}" style="width:18px;height:18px;accent-color:var(--gold);cursor:pointer;flex-shrink:0">
-          <div style="flex:1;min-width:0">
-            <strong>${esc(c.first_name)} ${esc(c.last_name)}</strong>
-            <span style="color:var(--text-muted);font-size:13px;margin-left:8px">${esc(c.email)}</span>
-          </div>
+          <strong style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.first_name)}</strong>
+          <strong style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.last_name)}</strong>
+          <span style="color:var(--text-muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.email)}</span>
           <span class="badge ${status.cls}">${status.label}</span>
         </div>
         <div id="batchFields${idx}" style="display:none;margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
@@ -152,7 +166,16 @@ export async function batchInvoiceScreen(container) {
       renderScreen();
     });
 
-    clients.forEach((c, idx) => {
+    container.querySelectorAll('[data-sort]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const next = btn.dataset.sort;
+        if (next === sortKey) return;
+        sortKey = next;
+        renderScreen();
+      });
+    });
+
+    clients().forEach((c, idx) => {
       const check = document.getElementById(`batchCheck${idx}`);
       const fields = document.getElementById(`batchFields${idx}`);
 
@@ -209,7 +232,7 @@ export async function batchInvoiceScreen(container) {
     const date = document.getElementById('batchDate').value;
     const invoices = [];
 
-    clients.forEach((c, idx) => {
+    clients().forEach((c, idx) => {
       const check = document.getElementById(`batchCheck${idx}`);
       if (!check.checked) return;
 
