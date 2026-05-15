@@ -1,7 +1,7 @@
 {
   "name": "cfg-invoicing",
   "productName": "CFG Invoicing",
-  "version": "1.1.11",
+  "version": "1.1.12",
   "description": "Checkmate Financial Group Invoice Manager",
   "main": "main.js",
   "scripts": {
@@ -28,9 +28,15 @@
       "category": "public.app-category.business",
       "target": [
         {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
           "target": "dmg",
           "arch": [
-            "universal"
+            "arm64"
           ]
         }
       ]
