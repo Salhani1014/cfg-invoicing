@@ -77,6 +77,17 @@ app.whenReady().then(async () => {
     });
 
     autoUpdater.checkForUpdates();
+
+    // Periodic check while the app stays open. Most users keep this running
+    // for hours/days — without a recurring check they'd never see an update
+    // mid-session.
+    setInterval(() => {
+      try {
+        autoUpdater.checkForUpdates();
+      } catch (e) {
+        console.error('[updater] periodic check failed:', e.message);
+      }
+    }, 30 * 60 * 1000); // 30 minutes
   } catch (_) {}
 
   // Auto-send overdue reminders 5 seconds after launch

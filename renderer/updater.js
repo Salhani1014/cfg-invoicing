@@ -161,8 +161,8 @@ END OF LICENSE.`;
         ${CHANGES.map((_, i) => `<div class="upd-dot ${i === changeIdx ? 'on' : ''}"></div>`).join('')}
       </div>
     `;
-    laterBtn.style.display = '';
-    laterBtn.textContent = 'Maybe later';
+    // Force-update mode: no escape from the changelog. The user MUST proceed.
+    laterBtn.style.display = 'none';
     nextBtn.textContent = 'See the fine print →';
     nextBtn.disabled = false;
 
@@ -194,6 +194,8 @@ END OF LICENSE.`;
         I have read, understood, and accept these absurd terms.
       </label>
     `;
+    // Back navigates within the flow (to changelog), NOT a way to escape.
+    laterBtn.style.display = '';
     laterBtn.textContent = '← Back';
     nextBtn.textContent = 'Install';
     nextBtn.disabled = true;
@@ -252,15 +254,15 @@ END OF LICENSE.`;
   function renderRestart() {
     clearCycle();
     title.textContent = '🎉 Ready to restart';
-    sub.textContent = `v${pendingVersion} is installed — relaunch to use it`;
+    sub.textContent = `v${pendingVersion} is installed — relaunch required`;
     body.innerHTML = `
       <div class="upd-change">
         <div class="upd-change-emoji">✅</div>
-        <div>Download complete. Restart the app and you'll be on the new version. Your work is saved.</div>
+        <div>Download complete. Restart now — you can't keep using the old version. Your work is saved.</div>
       </div>
     `;
-    laterBtn.style.display = '';
-    laterBtn.textContent = 'Restart later';
+    // Force-update mode: no defer button.
+    laterBtn.style.display = 'none';
     nextBtn.textContent = 'Restart now';
     nextBtn.disabled = false;
   }
@@ -268,22 +270,22 @@ END OF LICENSE.`;
   function renderError(msg) {
     clearCycle();
     title.textContent = '⚠️ Update failed';
-    sub.textContent = 'Something went sideways. Try again later.';
+    sub.textContent = 'We hit a snag. Try again in a moment.';
     body.innerHTML = `
       <div class="upd-change">
         <div class="upd-change-emoji">🙃</div>
-        <div>${msg || 'Unknown error.'} If this keeps happening, ping Braxton or just restart the app — it'll retry on next launch.</div>
+        <div>${msg || 'Unknown error.'} The app will keep trying every 30 minutes. If you need it sooner, quit and relaunch.</div>
       </div>
     `;
-    laterBtn.style.display = '';
-    laterBtn.textContent = 'Close';
-    nextBtn.style.display = 'none';
+    laterBtn.style.display = 'none';
+    nextBtn.textContent = 'Try again';
+    nextBtn.disabled = false;
   }
 
   // ─── Button wiring ───────────────────────────────────────────────────
+  // No path hides the modal. "Back" only navigates within the flow.
   laterBtn.addEventListener('click', () => {
     if (step === 'tos') { step = 'changelog'; renderChangelog(); return; }
-    hide();
   });
   nextBtn.addEventListener('click', () => {
     if (step === 'changelog') { step = 'tos'; renderTos(); return; }
@@ -297,11 +299,19 @@ END OF LICENSE.`;
       nextBtn.disabled = true;
       nextBtn.textContent = 'Restarting…';
       window.api.updater.install();
+      return;
     }
+    // Error step: retry the download.
+    step = 'install';
+    renderInstall();
   });
 
   // ─── IPC events ──────────────────────────────────────────────────────
   window.api.updater.onUpdateAvailable(info => {
+    // Periodic check may re-fire while modal is already open — ignore
+    // duplicates so we don't reset the user's scroll-progress / agree state
+    // mid-read.
+    if (root.style.display === 'flex' && pendingVersion === info.version) return;
     pendingVersion = info.version;
     step = 'changelog';
     changeIdx = 0;
