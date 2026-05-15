@@ -2,6 +2,7 @@ export async function settingsScreen(container) {
   const settings = await window.api.settings.getAll();
   const userCfg = await window.api.userConfig.getConfig() || {};
   const USER_LABELS = { braxton: 'Braxton Mondell', obada: 'Obada' };
+  const appVersion = window.APP_VERSION || '—';
 
   container.innerHTML = `
     <div class="page-header">
@@ -80,6 +81,15 @@ export async function settingsScreen(container) {
         <button class="btn btn-primary" id="savePaymentBtn">Save Payment Methods</button>
       </div>
 
+      <div class="card">
+        <h3 style="font-size:15px;font-weight:600;color:var(--gold);margin-bottom:6px">App &amp; Updates</h3>
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:18px">Currently running <strong style="color:var(--text)">v${esc(appVersion)}</strong>. The app checks for updates automatically on launch and every 5 minutes — you can also force a check now.</p>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn btn-primary" id="checkForUpdatesBtn">Check for Updates</button>
+          <span id="checkForUpdatesStatus" style="font-size:13px;color:var(--text-muted)"></span>
+        </div>
+      </div>
+
     </div>
   `;
 
@@ -150,6 +160,26 @@ export async function settingsScreen(container) {
       showToast('Payment methods saved.', 'success');
     } catch (e) {
       showToast('Failed to save.', 'error');
+    }
+  });
+
+  document.getElementById('checkForUpdatesBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('checkForUpdatesBtn');
+    const status = document.getElementById('checkForUpdatesStatus');
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+    status.textContent = 'Reaching GitHub…';
+    status.style.color = 'var(--text-muted)';
+    try {
+      await window.api.updater.checkNow();
+      status.textContent = 'Done.';
+    } catch (e) {
+      status.textContent = 'Failed: ' + (e?.message || e);
+      status.style.color = 'var(--red)';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Check for Updates';
+      setTimeout(() => { status.textContent = ''; }, 4000);
     }
   });
 }

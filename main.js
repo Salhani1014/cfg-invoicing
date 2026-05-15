@@ -146,30 +146,97 @@ app.whenReady().then(async () => {
   }
 
   async function customGithubCheck(label) {
+    const isManual = label === 'manual' || label === 'manual-ipc' || label === 'manual-settings';
+    // Manual checks always re-trigger UI feedback, even if we already
+    // notified about this version on launch.
+    if (isManual) lastNotifiedVersion = null;
+
     try {
       const res = await fetch(
         'https://api.github.com/repos/Salhani1014/cfg-invoicing/releases/latest',
         { headers: { Accept: 'application/vnd.github+json' } }
       );
       if (!res.ok) {
-        console.error(`[updater] github ${label} check failed: HTTP ${res.status}`);
+        const msg = `GitHub returned HTTP ${res.status}`;
+        console.error(`[updater] github ${label} check failed: ${msg}`);
+        if (isManual) {
+          await dialog.showMessageBox(mainWindow, {
+            type: 'error',
+            title: 'Update Check Failed',
+            message: 'Could not reach update server',
+            detail: msg + '\n\nCheck your internet connection and try again.',
+            buttons: ['OK'],
+          });
+        }
         return;
       }
       const data = await res.json();
       const tag = (data.tag_name || '').replace(/^v/, '');
       const current = app.getVersion();
       console.log(`[updater] github ${label} check: current=${current} latest=${tag}`);
-      if (semverGreater(tag, current) && tag !== lastNotifiedVersion) {
+
+      if (semverGreater(tag, current)) {
         lastNotifiedVersion = tag;
         console.log('[updater] UPDATE AVAILABLE (via github check):', tag);
+
+        // Still emit the IPC event so the polished in-app modal can fire if
+        // the renderer is ready. But ALSO show a native dialog for manual
+        // checks — this is the bulletproof path that works no matter what.
         emitUpdateAvailable({
           version: tag,
           releaseNotes: data.body || '',
           htmlUrl: data.html_url || '',
         });
+
+        if (isManual) {
+          const dmgAsset = (data.assets || []).find(a => a.name?.endsWith('.dmg'));
+          const choice = await dialog.showMessageBox(mainWindow, {
+            type: 'info',
+            title: 'Update Available',
+            message: `Version ${tag} is available`,
+            detail: `You're currently on v${current}.\n\nClick "Download" to grab the installer. After it downloads, drag CFG Invoicing into Applications (replace the old one), then quit and reopen the app.`,
+            buttons: ['Download', 'Later'],
+            defaultId: 0,
+            cancelId: 1,
+          });
+          if (choice.response === 0) {
+            const url = dmgAsset?.browser_download_url
+              || data.html_url
+              || `https://github.com/Salhani1014/cfg-invoicing/releases/tag/v${tag}`;
+            shell.openExternal(url);
+          }
+        }
+        return;
+      }
+
+      // No update available
+      if (isManual) {
+        await dialog.showMessageBox(mainWindow, {
+          type: 'info',
+          title: 'No Updates Available',
+          message: "You're up to date",
+          detail: `Running the latest version (v${current}).`,
+          buttons: ['OK'],
+        });
       }
     } catch (e) {
-      console.error(`[updater] github ${label} check error:`, e?.message || e);
+      const msg = e?.message || String(e);
+      console.error(`[updater] github ${label} check error:`, msg);
+      if (isManual) {
+        await dialog.showMessageBox(mainWindow, {
+          type: 'error',
+          title: 'Update Check Failed',
+          message: 'Could not check for updates',
+          detail: msg + '\n\nTry again in a moment, or download the latest version directly from GitHub.',
+          buttons: ['Open GitHub', 'OK'],
+          defaultId: 1,
+          cancelId: 1,
+        }).then(r => {
+          if (r.response === 0) {
+            shell.openExternal('https://github.com/Salhani1014/cfg-invoicing/releases/latest');
+          }
+        });
+      }
     }
   }
 
@@ -245,8 +312,8 @@ app.whenReady().then(async () => {
 
   // IPC handler so the renderer can also trigger a manual check (e.g. from
   // a Settings button).
-  ipcMain.handle('updater:checkNow', () => {
-    customGithubCheck('manual-ipc');
+  ipcMain.handle('updater:checkNow', async () => {
+    await customGithubCheck('manual-settings');
     return { ok: true };
   });
 
