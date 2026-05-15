@@ -4,6 +4,7 @@ const fs = require('fs');
 const db = require('./src/db');
 const userConfig = require('./src/user-config');
 const dbContractors = require('./src/db-contractors');
+const tt = require('./src/db-time-tracking');
 
 app.setName('CFG Invoicing');
 
@@ -106,6 +107,18 @@ ipcMain.handle('db:getLastClientInvoice', (_, clientId)=> db.getLastClientInvoic
 ipcMain.handle('db:markReminderSent',     (_, id)      => db.markReminderSent(id));
 ipcMain.handle('db:updateInvoiceNotes',   (_, id, notes)=> db.updateInvoiceNotes(id, notes));
 ipcMain.handle('db:getSchemaVersion',     ()           => db.getSchemaVersion());
+
+// ─── Time Tracking IPC ─────────────────────────────────────────
+ipcMain.handle('tt:listEmployees',          ()                       => tt.listEmployees());
+ipcMain.handle('tt:createEmployee',         (_e, data)               => tt.createEmployee(data));
+ipcMain.handle('tt:updateEmployee',         (_e, id, patch)          => tt.updateEmployee(id, patch));
+ipcMain.handle('tt:unbindDevice',           (_e, employeeId)         => tt.unbindDevice(employeeId));
+ipcMain.handle('tt:listShifts',             (_e, employeeId, week)   => tt.listShifts(employeeId, week));
+ipcMain.handle('tt:listWifiEventsForShift', (_e, shiftId)            => tt.listWifiEventsForShift(shiftId));
+ipcMain.handle('tt:editShift',              (_e, id, patch, admin)   => tt.editShift(id, patch, admin));
+ipcMain.handle('tt:closeShiftViaAudit',     (_e, shiftId, admin)     => tt.closeShiftViaAudit(shiftId, admin));
+ipcMain.handle('tt:listOpenMismatches',     ()                       => tt.listOpenMismatches());
+ipcMain.handle('tt:liveStatus',             ()                       => tt.liveStatus());
 
 // Settings handlers
 ipcMain.handle('settings:get',    (_, key)        => db.getSetting(key));
