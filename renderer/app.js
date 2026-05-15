@@ -9,6 +9,7 @@ const screenLoaders = {
   dashboard:      () => import('./screens/dashboard.js').then(m => m.dashboardScreen),
   settings:       () => import('./screens/settings.js').then(m => m.settingsScreen),
   setup:          () => import('./screens/setup.js').then(m => m.setupScreen),
+  login:          () => import('./screens/login.js').then(m => m.loginScreen),
 };
 
 async function navigate(screenName, params = {}) {
@@ -52,8 +53,38 @@ document.querySelectorAll('.nav-link').forEach(link => {
 window.navigate = navigate;
 window.updateUnpaidBadge = updateUnpaidBadge;
 
+function setChromeVisible(visible) {
+  // Sidebar + drag-bar are hidden behind the full-screen login.
+  const sidebar = document.getElementById('sidebar');
+  const dragBar = document.getElementById('drag-bar');
+  if (sidebar) sidebar.style.display = visible ? '' : 'none';
+  if (dragBar) dragBar.style.display = visible ? '' : 'none';
+  const main = document.getElementById('screen-container');
+  if (main) main.style.marginLeft = visible ? '' : '0';
+}
+
 async function init() {
   const container = document.getElementById('screen-container');
+
+  // Auth gate — must come before any DB call so RLS-protected tables work.
+  let authStatus = { signedIn: false };
+  try {
+    authStatus = await window.api.auth.status();
+  } catch (e) {
+    console.error('[auth] status check failed:', e);
+  }
+  if (!authStatus.signedIn) {
+    setChromeVisible(false);
+    const screenFn = await screenLoaders.login();
+    await screenFn(container, {
+      onSuccess: async () => {
+        setChromeVisible(true);
+        await init();
+      },
+    });
+    return;
+  }
+  setChromeVisible(true);
 
   try {
     const version = await window.api.db.getSchemaVersion();

@@ -1,7 +1,13 @@
-const { createClient } = require('@supabase/supabase-js');
-const { SUPABASE_URL, SUPABASE_ANON_KEY } = require('./supabase');
+const { getSupabase } = require('./supabase');
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// `supabase` is a Proxy that forwards every access to the singleton client
+// returned by getSupabase(). This keeps the existing call sites unchanged
+// while ensuring all queries use the authenticated session set after sign-in.
+const supabase = new Proxy({}, {
+  get(_t, prop) {
+    return getSupabase()[prop];
+  },
+});
 
 // ─── Clients ────────────────────────────────────────────────────────────────
 

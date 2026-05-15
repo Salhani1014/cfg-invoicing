@@ -1,6 +1,13 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+  auth: {
+    status:    ()                 => ipcRenderer.invoke('auth:status'),
+    signIn:    (email, password)  => ipcRenderer.invoke('auth:signIn', email, password),
+    sendOtp:   (email)            => ipcRenderer.invoke('auth:sendOtp', email),
+    verifyOtp: (email, token)     => ipcRenderer.invoke('auth:verifyOtp', email, token),
+    signOut:   ()                 => ipcRenderer.invoke('auth:signOut'),
+  },
   db: {
     getClients:           ()            => ipcRenderer.invoke('db:getClients'),
     addClient:            (data)        => ipcRenderer.invoke('db:addClient', data),

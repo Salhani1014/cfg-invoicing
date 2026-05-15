@@ -5,6 +5,7 @@ const db = require('./src/db');
 const userConfig = require('./src/user-config');
 const dbContractors = require('./src/db-contractors');
 const tt = require('./src/db-time-tracking');
+const auth = require('./src/auth');
 
 app.setName('CFG Invoicing');
 
@@ -26,11 +27,15 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (app.dock) {
     const icon = nativeImage.createFromPath(path.join(__dirname, 'renderer', 'assets', 'logo.png'));
     app.dock.setIcon(icon);
   }
+
+  // Restore Supabase session before the renderer queries auth status.
+  try { await auth.restoreSession(); } catch (e) { console.error('[auth] restore failed:', e.message); }
+
   createWindow();
 
   app.on('activate', () => {
@@ -91,6 +96,17 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+// Auth handlers
+ipcMain.handle('auth:status',             ()                  => auth.getStatus());
+ipcMain.handle('auth:signIn',             (_e, email, pass)   => auth.signInWithPassword(email, pass));
+ipcMain.handle('auth:sendOtp',            (_e, email)         => auth.signInWithOtp(email));
+ipcMain.handle('auth:verifyOtp',          (_e, email, token)  => auth.verifyOtp(email, token));
+ipcMain.handle('auth:signOut',            async ()            => {
+  await auth.signOut();
+  // Reload the renderer so it lands back on the login screen.
+  try { mainWindow?.reload(); } catch (_) {}
 });
 
 // DB handlers

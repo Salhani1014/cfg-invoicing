@@ -1,7 +1,11 @@
-const { createClient } = require('@supabase/supabase-js');
-const { SUPABASE_URL, SUPABASE_ANON_KEY } = require('./supabase');
+const { getSupabase } = require('./supabase');
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Proxy to the singleton client; queries pick up the authenticated session.
+const supabase = new Proxy({}, {
+  get(_t, prop) {
+    return getSupabase()[prop];
+  },
+});
 
 // ─── Contractors ─────────────────────────────────────────────────────────────
 

@@ -1,7 +1,12 @@
-const { createClient } = require('@supabase/supabase-js');
-const { SUPABASE_URL, SUPABASE_ANON_KEY } = require('./supabase');
+const { getSupabase } = require('./supabase');
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Proxy to the singleton client; tt_* queries require an authenticated
+// session (RLS gates on auth.uid() → tt_employees.role = 'admin').
+const supabase = new Proxy({}, {
+  get(_t, prop) {
+    return getSupabase()[prop];
+  },
+});
 
 // ─── Pure helpers (tested) ──────────────────────────────────────
 
