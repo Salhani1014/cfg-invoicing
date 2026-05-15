@@ -4,8 +4,13 @@
 // hasn't signed in via Supabase Auth before).
 export async function loginScreen(container, { onSuccess } = {}) {
   container.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:40px">
-      <div class="card" style="max-width:420px;width:100%">
+    <!-- Drag region at the top so the window can be moved while the login
+         overlay is shown. Electron's titleBarStyle:'hiddenInset' has no
+         visible title bar, so without this the user is trapped — the
+         inputs below capture all pointer events. -->
+    <div style="-webkit-app-region:drag;height:36px;width:100%;position:fixed;top:0;left:0;z-index:0"></div>
+    <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:40px;position:relative;z-index:1">
+      <div class="card" style="max-width:420px;width:100%;-webkit-app-region:no-drag">
         <div style="text-align:center;margin-bottom:24px">
           <h1 style="font-size:22px;font-weight:700;color:var(--gold);margin-bottom:6px">Sign in</h1>
           <p style="color:var(--text-muted);font-size:13px">CFG Invoicing — admin access</p>
