@@ -42,15 +42,28 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 
-  // Auto-updater (checks GitHub releases on launch)
+  // Auto-updater (checks GitHub releases on launch). We DON'T auto-download
+  // — the renderer drives the flow: changelog → ToS gate → user clicks
+  // Install → we trigger downloadUpdate and stream progress back.
   try {
     const { autoUpdater } = require('electron-updater');
     autoUpdater.logger = null;
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = false;
 
     autoUpdater.on('update-available', info => {
       mainWindow?.webContents.send('update-available', {
         version: info.version,
         releaseNotes: info.releaseNotes || ''
+      });
+    });
+
+    autoUpdater.on('download-progress', p => {
+      mainWindow?.webContents.send('update-download-progress', {
+        percent: p.percent,
+        bytesPerSecond: p.bytesPerSecond,
+        transferred: p.transferred,
+        total: p.total
       });
     });
 
@@ -60,6 +73,7 @@ app.whenReady().then(async () => {
 
     autoUpdater.on('error', err => {
       console.error('[updater]', err.message);
+      mainWindow?.webContents.send('update-error', err.message);
     });
 
     autoUpdater.checkForUpdates();
@@ -155,6 +169,15 @@ ipcMain.handle('shell:openPath',     (_, p)   => shell.openPath(p));
 ipcMain.handle('shell:openExternal', (_, url) => shell.openExternal(url));
 ipcMain.handle('autoUpdater:install', () => {
   try { require('electron-updater').autoUpdater.quitAndInstall(); } catch (e) { console.error('[updater] Install failed:', e.message); }
+});
+ipcMain.handle('autoUpdater:download', async () => {
+  try {
+    await require('electron-updater').autoUpdater.downloadUpdate();
+    return { ok: true };
+  } catch (e) {
+    console.error('[updater] download failed:', e.message);
+    return { ok: false, error: e.message };
+  }
 });
 
 const { generateInvoicePDF, generatePaidPDF, regenerateInvoicePDF, generatePayStub, generateYearEndSummaryPDF } = require('./src/pdf-generator');

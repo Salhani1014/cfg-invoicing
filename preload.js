@@ -65,7 +65,10 @@ contextBridge.exposeInMainWorld('api', {
   },
   updater: {
     onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_, info) => cb(info)),
+    onDownloadProgress: (cb) => ipcRenderer.on('update-download-progress', (_, p) => cb(p)),
     onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', () => cb()),
+    onError: (cb) => ipcRenderer.on('update-error', (_, msg) => cb(msg)),
+    download: () => ipcRenderer.invoke('autoUpdater:download'),
     install: () => ipcRenderer.invoke('autoUpdater:install'),
   },
   timeTracking: {
