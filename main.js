@@ -42,22 +42,30 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 
-  // Auto-updater (checks GitHub releases on launch). We DON'T auto-download
-  // — the renderer drives the flow: changelog → ToS gate → user clicks
-  // Install → we trigger downloadUpdate and stream progress back.
+  // Auto-updater. Mandatory updates — the renderer modal can't be dismissed.
+  // Aggressive check schedule so users never linger on an old version:
+  //   - on launch (immediate)
+  //   - every 5 minutes (periodic)
+  //   - on every window focus (caught at front-of-screen moments)
   try {
     const { autoUpdater } = require('electron-updater');
-    autoUpdater.logger = null;
+    autoUpdater.logger = console; // console-logged so we can debug if it stops detecting
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = false;
 
+    autoUpdater.on('checking-for-update', () => {
+      console.log('[updater] checking…');
+    });
+    autoUpdater.on('update-not-available', info => {
+      console.log('[updater] no update (current:', info?.version || '?', ')');
+    });
     autoUpdater.on('update-available', info => {
+      console.log('[updater] UPDATE AVAILABLE:', info?.version);
       mainWindow?.webContents.send('update-available', {
         version: info.version,
         releaseNotes: info.releaseNotes || ''
       });
     });
-
     autoUpdater.on('download-progress', p => {
       mainWindow?.webContents.send('update-download-progress', {
         percent: p.percent,
@@ -66,28 +74,28 @@ app.whenReady().then(async () => {
         total: p.total
       });
     });
-
     autoUpdater.on('update-downloaded', () => {
       mainWindow?.webContents.send('update-downloaded');
     });
-
     autoUpdater.on('error', err => {
-      console.error('[updater]', err.message);
+      console.error('[updater] error:', err.message);
       mainWindow?.webContents.send('update-error', err.message);
     });
 
-    autoUpdater.checkForUpdates();
+    const safeCheck = (label) => {
+      Promise.resolve(autoUpdater.checkForUpdates()).catch(e => {
+        console.error(`[updater] ${label} check failed:`, e?.message || e);
+      });
+    };
 
-    // Periodic check while the app stays open. Most users keep this running
-    // for hours/days — without a recurring check they'd never see an update
-    // mid-session.
-    setInterval(() => {
-      try {
-        autoUpdater.checkForUpdates();
-      } catch (e) {
-        console.error('[updater] periodic check failed:', e.message);
-      }
-    }, 30 * 60 * 1000); // 30 minutes
+    // 1. Immediate check on launch
+    safeCheck('launch');
+
+    // 2. Periodic check every 5 minutes
+    setInterval(() => safeCheck('periodic'), 5 * 60 * 1000);
+
+    // 3. Check on every window focus — catches "user just came back to the app"
+    mainWindow?.on('focus', () => safeCheck('focus'));
   } catch (_) {}
 
   // Auto-send overdue reminders 5 seconds after launch
