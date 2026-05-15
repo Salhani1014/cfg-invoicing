@@ -1,7 +1,7 @@
 {
   "name": "cfg-invoicing",
   "productName": "CFG Invoicing",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Checkmate Financial Group Invoice Manager",
   "main": "main.js",
   "scripts": {
