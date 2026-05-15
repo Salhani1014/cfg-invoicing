@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const db = require('./src/db');
@@ -25,6 +25,64 @@ function createWindow() {
   });
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   mainWindow.on('closed', () => { mainWindow = null; });
+
+  // Re-emit any buffered update-info once the renderer has fully loaded —
+  // closes the launch-time race where update checks fired before the
+  // renderer's IPC listeners were registered.
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (global.__bufferedUpdateInfo) {
+      console.log('[updater] renderer ready — re-emitting buffered update-available');
+      try {
+        mainWindow.webContents.send('update-available', global.__bufferedUpdateInfo);
+      } catch (e) {
+        console.error('[updater] re-emit failed:', e?.message || e);
+      }
+    }
+  });
+}
+
+// Custom app menu with a manual "Check for Updates…" item. The function
+// itself is wired below — once defined we install the menu.
+function buildAppMenu(triggerCheck) {
+  const template = [
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        {
+          label: 'Check for Updates…',
+          accelerator: 'CmdOrCtrl+U',
+          click: () => triggerCheck && triggerCheck('manual'),
+        },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    { role: 'editMenu' },
+    {
+      role: 'viewMenu',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    { role: 'windowMenu' },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
 app.whenReady().then(async () => {
@@ -63,6 +121,29 @@ app.whenReady().then(async () => {
   }
 
   let lastNotifiedVersion = null;
+  // Buffer the most recent update-available payload so we can re-emit it
+  // when the renderer finishes loading. The launch-time check often fires
+  // BEFORE renderer/updater.js has registered its IPC listener — that race
+  // is the most likely reason the modal never popped.
+  let bufferedUpdateInfo = null;
+
+  function emitUpdateAvailable(info) {
+    bufferedUpdateInfo = info;
+    // Stash on global so did-finish-load (defined inside createWindow) can
+    // pick it up — they share the same module scope but the createWindow
+    // closure was created before this function existed during refactor.
+    global.__bufferedUpdateInfo = info;
+    try {
+      if (mainWindow?.webContents && !mainWindow.webContents.isLoading()) {
+        mainWindow.webContents.send('update-available', info);
+        console.log('[updater] → emitted update-available to renderer');
+      } else {
+        console.log('[updater] renderer not ready; buffering update-available for did-finish-load');
+      }
+    } catch (e) {
+      console.error('[updater] emit failed:', e?.message || e);
+    }
+  }
 
   async function customGithubCheck(label) {
     try {
@@ -81,7 +162,7 @@ app.whenReady().then(async () => {
       if (semverGreater(tag, current) && tag !== lastNotifiedVersion) {
         lastNotifiedVersion = tag;
         console.log('[updater] UPDATE AVAILABLE (via github check):', tag);
-        mainWindow?.webContents.send('update-available', {
+        emitUpdateAvailable({
           version: tag,
           releaseNotes: data.body || '',
           htmlUrl: data.html_url || '',
@@ -102,10 +183,9 @@ app.whenReady().then(async () => {
     autoUpdater.on('update-not-available', info => console.log('[updater] eu: no update'));
     autoUpdater.on('update-available', info => {
       console.log('[updater] eu UPDATE AVAILABLE:', info?.version);
-      // Don't re-fire the modal if github check already did
       if (info?.version && info.version !== lastNotifiedVersion) {
         lastNotifiedVersion = info.version;
-        mainWindow?.webContents.send('update-available', {
+        emitUpdateAvailable({
           version: info.version,
           releaseNotes: info.releaseNotes || '',
         });
@@ -157,6 +237,18 @@ app.whenReady().then(async () => {
     setInterval(() => customGithubCheck('periodic'), 5 * 60 * 1000);
     mainWindow?.on('focus', () => customGithubCheck('focus'));
   }
+
+  // Install the app menu with the manual "Check for Updates…" item now
+  // that customGithubCheck is in scope. CmdOrCtrl+U triggers it from
+  // anywhere in the app.
+  buildAppMenu(customGithubCheck);
+
+  // IPC handler so the renderer can also trigger a manual check (e.g. from
+  // a Settings button).
+  ipcMain.handle('updater:checkNow', () => {
+    customGithubCheck('manual-ipc');
+    return { ok: true };
+  });
 
   // Auto-send overdue reminders 5 seconds after launch
   setTimeout(async () => {

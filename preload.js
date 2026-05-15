@@ -70,6 +70,7 @@ contextBridge.exposeInMainWorld('api', {
     onError: (cb) => ipcRenderer.on('update-error', (_, msg) => cb(msg)),
     download: () => ipcRenderer.invoke('autoUpdater:download'),
     install: () => ipcRenderer.invoke('autoUpdater:install'),
+    checkNow: () => ipcRenderer.invoke('updater:checkNow'),
   },
   timeTracking: {
     listEmployees:          ()                       => ipcRenderer.invoke('tt:listEmployees'),
