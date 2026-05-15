@@ -55,11 +55,12 @@ window.navigate = navigate;
 window.updateUnpaidBadge = updateUnpaidBadge;
 
 function setChromeVisible(visible) {
-  // Sidebar + drag-bar are hidden behind the full-screen login.
+  // Hide sidebar behind the full-screen login. KEEP drag-bar visible —
+  // it's invisible (empty 28px strip at the top) and gives the user a
+  // guaranteed drag region above the login card. Hiding it leaves a
+  // 28px dead zone at top because #app still has margin-top:28px.
   const sidebar = document.getElementById('sidebar');
-  const dragBar = document.getElementById('drag-bar');
   if (sidebar) sidebar.style.display = visible ? '' : 'none';
-  if (dragBar) dragBar.style.display = visible ? '' : 'none';
   const main = document.getElementById('screen-container');
   if (main) main.style.marginLeft = visible ? '' : '0';
 }

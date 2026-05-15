@@ -317,6 +317,8 @@ app.whenReady().then(async () => {
     return { ok: true };
   });
 
+  ipcMain.handle('app:getVersion', () => app.getVersion());
+
   // Auto-send overdue reminders 5 seconds after launch
   setTimeout(async () => {
     try {

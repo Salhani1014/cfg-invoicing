@@ -1,8 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('APP_VERSION', process.env.npm_package_version || require('./package.json').version);
-
 contextBridge.exposeInMainWorld('api', {
+  app: {
+    getVersion: () => ipcRenderer.invoke('app:getVersion'),
+  },
   auth: {
     status:    ()                 => ipcRenderer.invoke('auth:status'),
     signIn:    (email, password)  => ipcRenderer.invoke('auth:signIn', email, password),

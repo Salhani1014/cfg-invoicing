@@ -2,7 +2,8 @@ export async function settingsScreen(container) {
   const settings = await window.api.settings.getAll();
   const userCfg = await window.api.userConfig.getConfig() || {};
   const USER_LABELS = { braxton: 'Braxton Mondell', obada: 'Obada' };
-  const appVersion = window.APP_VERSION || '—';
+  let appVersion = '—';
+  try { appVersion = await window.api.app.getVersion(); } catch (_) {}
 
   container.innerHTML = `
     <div class="page-header">
