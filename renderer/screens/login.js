@@ -4,12 +4,13 @@
 // hasn't signed in via Supabase Auth before).
 export async function loginScreen(container, { onSuccess } = {}) {
   container.innerHTML = `
-    <!-- Drag region at the top so the window can be moved while the login
-         overlay is shown. Electron's titleBarStyle:'hiddenInset' has no
-         visible title bar, so without this the user is trapped — the
-         inputs below capture all pointer events. -->
-    <div style="-webkit-app-region:drag;height:36px;width:100%;position:fixed;top:0;left:0;z-index:0"></div>
-    <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:40px;position:relative;z-index:1">
+    <!-- The whole login background is a drag region (so you can grab any
+         empty space and move the window). The card and its inputs are
+         explicitly no-drag so clicks/typing inside them behave normally.
+         Required because Electron's titleBarStyle 'hiddenInset' shows no
+         visible title bar and the rest of the renderer has been hiding
+         the chrome on the login screen — without this the user is stuck. -->
+    <div style="-webkit-app-region:drag;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:40px">
       <div class="card" style="max-width:420px;width:100%;-webkit-app-region:no-drag">
         <div style="text-align:center;margin-bottom:24px">
           <h1 style="font-size:22px;font-weight:700;color:var(--gold);margin-bottom:6px">Sign in</h1>
