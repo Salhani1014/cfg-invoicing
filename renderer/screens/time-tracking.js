@@ -292,6 +292,45 @@ function openAddEmployeeModal(body) {
     }
   };
 }
-function renderAlerts(body) {
-  body.innerHTML = '<p>Alerts — Task 11.5</p>';
+async function renderAlerts(body) {
+  body.innerHTML = '<p>Loading…</p>';
+  let rows;
+  try { rows = await window.api.timeTracking.listOpenMismatches(); }
+  catch (e) { body.innerHTML = `<p class="error">${escapeHtml(String(e.message || e))}</p>`; return; }
+
+  if (!rows.length) { body.innerHTML = '<p class="muted">No mismatches right now.</p>'; return; }
+
+  body.innerHTML = `
+    <table class="tt-alerts-table">
+      <thead><tr>
+        <th>Employee</th><th>Clocked in</th><th>Last seen on WiFi</th><th>Off for</th><th>Action</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr data-shift-id="${r.shiftId}">
+            <td>${escapeHtml(r.employeeName)}</td>
+            <td>${formatTime(r.clockInAt)}</td>
+            <td>${formatTime(r.lastSeenAt)}</td>
+            <td>${minutesAgo(r.lastSeenAt)} min</td>
+            <td><button data-action="close" class="btn-primary">Close at last-seen</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+
+  body.querySelectorAll('tr[data-shift-id]').forEach(tr => {
+    tr.querySelector('[data-action="close"]').onclick = async () => {
+      if (!confirm('Close this shift at the last WiFi-seen timestamp?')) return;
+      try {
+        await window.api.timeTracking.closeShiftViaAudit(tr.dataset.shiftId, await getCurrentAdminId());
+        renderAlerts(body);
+      } catch (e) {
+        alert('Error: ' + (e.message || e));
+      }
+    };
+  });
+}
+
+function minutesAgo(iso) {
+  return Math.round((Date.now() - new Date(iso).getTime()) / 60000);
 }
