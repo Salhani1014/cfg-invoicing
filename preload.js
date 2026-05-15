@@ -61,4 +61,16 @@ contextBridge.exposeInMainWorld('api', {
     onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', () => cb()),
     install: () => ipcRenderer.invoke('autoUpdater:install'),
   },
+  timeTracking: {
+    listEmployees:          ()                       => ipcRenderer.invoke('tt:listEmployees'),
+    createEmployee:         (data)                   => ipcRenderer.invoke('tt:createEmployee', data),
+    updateEmployee:         (id, patch)              => ipcRenderer.invoke('tt:updateEmployee', id, patch),
+    unbindDevice:           (employeeId)             => ipcRenderer.invoke('tt:unbindDevice', employeeId),
+    listShifts:             (employeeId, week)       => ipcRenderer.invoke('tt:listShifts', employeeId, week),
+    listWifiEventsForShift: (shiftId)                => ipcRenderer.invoke('tt:listWifiEventsForShift', shiftId),
+    editShift:              (id, patch, adminId)     => ipcRenderer.invoke('tt:editShift', id, patch, adminId),
+    closeShiftViaAudit:     (shiftId, adminId)       => ipcRenderer.invoke('tt:closeShiftViaAudit', shiftId, adminId),
+    listOpenMismatches:     ()                       => ipcRenderer.invoke('tt:listOpenMismatches'),
+    liveStatus:             ()                       => ipcRenderer.invoke('tt:liveStatus'),
+  },
 });
