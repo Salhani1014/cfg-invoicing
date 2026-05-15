@@ -42,61 +42,121 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 
-  // Auto-updater. Mandatory updates — the renderer modal can't be dismissed.
-  // Aggressive check schedule so users never linger on an old version:
-  //   - on launch (immediate)
-  //   - every 5 minutes (periodic)
-  //   - on every window focus (caught at front-of-screen moments)
+  // Mandatory updates with bulletproof detection. Two layers:
+  //   1. Custom GitHub-API check (always works — no signing / quarantine
+  //      requirements). Fires the modal even when electron-updater would
+  //      silently fail.
+  //   2. electron-updater (handles seamless download+install when it can).
+  //      If it errors, the modal falls back to opening the GitHub release
+  //      page in the browser so the user can download manually.
+  //
+  // Both run on launch + every 5 min + on every window focus.
+
+  function semverGreater(a, b) {
+    const pa = String(a).split('.').map(n => parseInt(n, 10) || 0);
+    const pb = String(b).split('.').map(n => parseInt(n, 10) || 0);
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] || 0) > (pb[i] || 0)) return true;
+      if ((pa[i] || 0) < (pb[i] || 0)) return false;
+    }
+    return false;
+  }
+
+  let lastNotifiedVersion = null;
+
+  async function customGithubCheck(label) {
+    try {
+      const res = await fetch(
+        'https://api.github.com/repos/Salhani1014/cfg-invoicing/releases/latest',
+        { headers: { Accept: 'application/vnd.github+json' } }
+      );
+      if (!res.ok) {
+        console.error(`[updater] github ${label} check failed: HTTP ${res.status}`);
+        return;
+      }
+      const data = await res.json();
+      const tag = (data.tag_name || '').replace(/^v/, '');
+      const current = app.getVersion();
+      console.log(`[updater] github ${label} check: current=${current} latest=${tag}`);
+      if (semverGreater(tag, current) && tag !== lastNotifiedVersion) {
+        lastNotifiedVersion = tag;
+        console.log('[updater] UPDATE AVAILABLE (via github check):', tag);
+        mainWindow?.webContents.send('update-available', {
+          version: tag,
+          releaseNotes: data.body || '',
+          htmlUrl: data.html_url || '',
+        });
+      }
+    } catch (e) {
+      console.error(`[updater] github ${label} check error:`, e?.message || e);
+    }
+  }
+
   try {
     const { autoUpdater } = require('electron-updater');
-    autoUpdater.logger = console; // console-logged so we can debug if it stops detecting
+    autoUpdater.logger = console;
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = false;
 
-    autoUpdater.on('checking-for-update', () => {
-      console.log('[updater] checking…');
-    });
-    autoUpdater.on('update-not-available', info => {
-      console.log('[updater] no update (current:', info?.version || '?', ')');
-    });
+    autoUpdater.on('checking-for-update', () => console.log('[updater] eu checking…'));
+    autoUpdater.on('update-not-available', info => console.log('[updater] eu: no update'));
     autoUpdater.on('update-available', info => {
-      console.log('[updater] UPDATE AVAILABLE:', info?.version);
-      mainWindow?.webContents.send('update-available', {
-        version: info.version,
-        releaseNotes: info.releaseNotes || ''
-      });
+      console.log('[updater] eu UPDATE AVAILABLE:', info?.version);
+      // Don't re-fire the modal if github check already did
+      if (info?.version && info.version !== lastNotifiedVersion) {
+        lastNotifiedVersion = info.version;
+        mainWindow?.webContents.send('update-available', {
+          version: info.version,
+          releaseNotes: info.releaseNotes || '',
+        });
+      }
     });
     autoUpdater.on('download-progress', p => {
       mainWindow?.webContents.send('update-download-progress', {
         percent: p.percent,
         bytesPerSecond: p.bytesPerSecond,
         transferred: p.transferred,
-        total: p.total
+        total: p.total,
       });
     });
     autoUpdater.on('update-downloaded', () => {
       mainWindow?.webContents.send('update-downloaded');
     });
     autoUpdater.on('error', err => {
-      console.error('[updater] error:', err.message);
+      console.error('[updater] eu error:', err.message);
+      // Send the error to the renderer so the modal can switch to the
+      // "open GitHub release in browser" fallback path. The modal is
+      // already mandatory; the user still HAS to update, just maybe via
+      // manual download.
       mainWindow?.webContents.send('update-error', err.message);
     });
 
-    const safeCheck = (label) => {
-      Promise.resolve(autoUpdater.checkForUpdates()).catch(e => {
-        console.error(`[updater] ${label} check failed:`, e?.message || e);
-      });
+    const euCheck = (label) => {
+      Promise.resolve(autoUpdater.checkForUpdates()).catch(e =>
+        console.error(`[updater] eu ${label} check failed:`, e?.message || e)
+      );
     };
 
-    // 1. Immediate check on launch
-    safeCheck('launch');
+    // Run BOTH checks on launch + every 5 min + on every window focus.
+    customGithubCheck('launch');
+    euCheck('launch');
 
-    // 2. Periodic check every 5 minutes
-    setInterval(() => safeCheck('periodic'), 5 * 60 * 1000);
+    setInterval(() => {
+      customGithubCheck('periodic');
+      euCheck('periodic');
+    }, 5 * 60 * 1000);
 
-    // 3. Check on every window focus — catches "user just came back to the app"
-    mainWindow?.on('focus', () => safeCheck('focus'));
-  } catch (_) {}
+    mainWindow?.on('focus', () => {
+      customGithubCheck('focus');
+      euCheck('focus');
+    });
+  } catch (e) {
+    // electron-updater might not load (dev mode) — github check still runs
+    console.error('[updater] electron-updater unavailable, github check only:', e?.message);
+    customGithubCheck('launch');
+    setInterval(() => customGithubCheck('periodic'), 5 * 60 * 1000);
+    mainWindow?.on('focus', () => customGithubCheck('focus'));
+  }
 
   // Auto-send overdue reminders 5 seconds after launch
   setTimeout(async () => {

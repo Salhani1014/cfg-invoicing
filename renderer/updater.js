@@ -136,6 +136,7 @@ END OF LICENSE.`;
   const nextBtn = root.querySelector('#updNext');
 
   let pendingVersion = null;
+  let pendingHtmlUrl = null;
   let downloaded = false;
   let step = 'changelog'; // changelog → tos → install → restart
   let changeIdx = 0;
@@ -269,16 +270,20 @@ END OF LICENSE.`;
 
   function renderError(msg) {
     clearCycle();
-    title.textContent = '⚠️ Update failed';
-    sub.textContent = 'We hit a snag. Try again in a moment.';
+    title.textContent = '⚠️ Auto-install hit a snag';
+    sub.textContent = `v${pendingVersion} couldn't install automatically — manual download is required`;
     body.innerHTML = `
       <div class="upd-change">
         <div class="upd-change-emoji">🙃</div>
-        <div>${msg || 'Unknown error.'} The app will keep trying every 30 minutes. If you need it sooner, quit and relaunch.</div>
+        <div>${msg || 'Unknown error.'} ${
+          pendingHtmlUrl
+            ? `Click below to open the release page in your browser — download the DMG, drag it into Applications (replace the old one), and relaunch.`
+            : 'Try again, or relaunch the app.'
+        }</div>
       </div>
     `;
     laterBtn.style.display = 'none';
-    nextBtn.textContent = 'Try again';
+    nextBtn.textContent = pendingHtmlUrl ? 'Open download page' : 'Try again';
     nextBtn.disabled = false;
   }
 
@@ -301,7 +306,11 @@ END OF LICENSE.`;
       window.api.updater.install();
       return;
     }
-    // Error step: retry the download.
+    // Error step: if we have a fallback URL, open it. Otherwise retry.
+    if (pendingHtmlUrl && window.api?.shell?.openExternal) {
+      window.api.shell.openExternal(pendingHtmlUrl);
+      return;
+    }
     step = 'install';
     renderInstall();
   });
@@ -313,6 +322,7 @@ END OF LICENSE.`;
     // mid-read.
     if (root.style.display === 'flex' && pendingVersion === info.version) return;
     pendingVersion = info.version;
+    pendingHtmlUrl = info.htmlUrl || `https://github.com/Salhani1014/cfg-invoicing/releases/tag/v${info.version}`;
     step = 'changelog';
     changeIdx = 0;
     scrolledToBottom = false;
