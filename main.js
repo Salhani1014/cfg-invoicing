@@ -7,6 +7,17 @@ const dbContractors = require('./src/db-contractors');
 const tt = require('./src/db-time-tracking');
 const auth = require('./src/auth');
 
+// Bundle the read-only GitHub PAT (private-repo auto-update). The token file
+// is gitignored and bundled into the asar at build time. If absent, the
+// update checks fall back to anonymous (which always 404s on private repos).
+// electron-updater reads GH_TOKEN automatically when set on process.env.
+try {
+  const ghToken = require('./src/github-token').GITHUB_TOKEN;
+  if (ghToken && typeof ghToken === 'string' && ghToken.length > 10) {
+    process.env.GH_TOKEN = ghToken;
+  }
+} catch (_) { /* no token bundled — fall back to anonymous */ }
+
 app.setName('CFG Invoicing');
 
 let mainWindow;
@@ -152,12 +163,15 @@ app.whenReady().then(async () => {
     if (isManual) lastNotifiedVersion = null;
 
     try {
+      const headers = { Accept: 'application/vnd.github+json' };
+      if (process.env.GH_TOKEN) headers.Authorization = `Bearer ${process.env.GH_TOKEN}`;
       const res = await fetch(
         'https://api.github.com/repos/Salhani1014/cfg-invoicing/releases/latest',
-        { headers: { Accept: 'application/vnd.github+json' } }
+        { headers }
       );
       if (!res.ok) {
-        const msg = `GitHub returned HTTP ${res.status}`;
+        const msg = `GitHub returned HTTP ${res.status}` +
+          (res.status === 404 && !process.env.GH_TOKEN ? ' (private repo — token missing)' : '');
         console.error(`[updater] github ${label} check failed: ${msg}`);
         if (isManual) {
           await dialog.showMessageBox(mainWindow, {
@@ -407,18 +421,179 @@ ipcMain.handle('dialog:selectFolder', async () => {
 });
 ipcMain.handle('shell:openPath',     (_, p)   => shell.openPath(p));
 ipcMain.handle('shell:openExternal', (_, url) => shell.openExternal(url));
-ipcMain.handle('autoUpdater:install', () => {
-  try { require('electron-updater').autoUpdater.quitAndInstall(); } catch (e) { console.error('[updater] Install failed:', e.message); }
-});
+// ─── Custom auto-update (bypasses Squirrel.Mac) ──────────────────────
+// We're ad-hoc signing (no Apple Developer ID), so Squirrel.Mac rejects
+// the new app at code-signature validation. Instead, we download the
+// ZIP from GitHub ourselves, extract with `ditto`, and use a detached
+// shell script to swap /Applications/CFG\ Invoicing.app and relaunch
+// AFTER we quit. No signing required.
+const os = require('os');
+const { spawn } = require('child_process');
+
+let stagedAppPath = null; // path to the extracted .app, set after download
+
 ipcMain.handle('autoUpdater:download', async () => {
   try {
-    await require('electron-updater').autoUpdater.downloadUpdate();
+    await customDownloadAndStage();
     return { ok: true };
   } catch (e) {
-    console.error('[updater] download failed:', e.message);
-    return { ok: false, error: e.message };
+    console.error('[updater] custom download failed:', e?.message || e);
+    mainWindow?.webContents.send('update-error', e?.message || String(e));
+    return { ok: false, error: e?.message || String(e) };
   }
 });
+
+ipcMain.handle('autoUpdater:install', async () => {
+  try {
+    await customInstallAndQuit();
+  } catch (e) {
+    console.error('[updater] custom install failed:', e?.message || e);
+    mainWindow?.webContents.send('update-error', e?.message || String(e));
+  }
+});
+
+async function customDownloadAndStage() {
+  // Fetch latest release manifest from GitHub
+  const headers = { Accept: 'application/vnd.github+json' };
+  if (process.env.GH_TOKEN) headers.Authorization = `Bearer ${process.env.GH_TOKEN}`;
+  const relRes = await fetch(
+    'https://api.github.com/repos/Salhani1014/cfg-invoicing/releases/latest',
+    { headers }
+  );
+  if (!relRes.ok) throw new Error(`GitHub release lookup failed: HTTP ${relRes.status}`);
+  const release = await relRes.json();
+  const zipAsset = (release.assets || []).find(
+    a => a.name.endsWith('-mac.zip') || (a.name.endsWith('.zip') && !a.name.endsWith('.blockmap'))
+  );
+  if (!zipAsset) throw new Error('No .zip asset in latest release.');
+
+  const tmpDir = path.join(os.tmpdir(), `cfg-update-${Date.now()}`);
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const zipPath = path.join(tmpDir, 'update.zip');
+
+  // Download the ZIP with progress reporting
+  console.log(`[updater] downloading ${zipAsset.browser_download_url}`);
+  const dlRes = await fetch(zipAsset.browser_download_url);
+  if (!dlRes.ok || !dlRes.body) throw new Error(`Download failed: HTTP ${dlRes.status}`);
+  const total = Number(dlRes.headers.get('content-length') || zipAsset.size || 0);
+  const startedAt = Date.now();
+  let downloaded = 0;
+
+  const writer = fs.createWriteStream(zipPath);
+  const reader = dlRes.body.getReader();
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    writer.write(value);
+    downloaded += value.length;
+    const elapsed = (Date.now() - startedAt) / 1000;
+    mainWindow?.webContents.send('update-download-progress', {
+      percent: total ? (downloaded / total) * 100 : 0,
+      bytesPerSecond: elapsed > 0 ? downloaded / elapsed : 0,
+      transferred: downloaded,
+      total,
+    });
+  }
+  await new Promise((resolve, reject) => {
+    writer.end(err => err ? reject(err) : resolve());
+  });
+
+  // Extract with `ditto` — preserves macOS metadata, code signature, etc.
+  const extractDir = path.join(tmpDir, 'extracted');
+  fs.mkdirSync(extractDir);
+  console.log(`[updater] extracting to ${extractDir}`);
+  await new Promise((resolve, reject) => {
+    const child = spawn('/usr/bin/ditto', ['-x', '-k', zipPath, extractDir]);
+    let stderr = '';
+    child.stderr?.on('data', d => { stderr += d.toString(); });
+    child.on('error', reject);
+    child.on('exit', code => {
+      if (code === 0) resolve();
+      else reject(new Error(`ditto exit ${code}: ${stderr.trim()}`));
+    });
+  });
+
+  const apps = fs.readdirSync(extractDir).filter(f => f.endsWith('.app'));
+  if (apps.length === 0) throw new Error('No .app bundle found in extracted ZIP.');
+  stagedAppPath = path.join(extractDir, apps[0]);
+  console.log(`[updater] staged at ${stagedAppPath}`);
+
+  // Signal renderer that download phase is complete
+  mainWindow?.webContents.send('update-downloaded');
+}
+
+async function customInstallAndQuit() {
+  if (!stagedAppPath) throw new Error('No staged update — download did not complete.');
+
+  // Find the currently-installed .app by walking up from the running exe
+  // (e.g. /Applications/CFG Invoicing.app/Contents/MacOS/CFG Invoicing).
+  const exePath = app.getPath('exe');
+  const installedAppPath = path.resolve(exePath, '..', '..', '..');
+
+  const scriptPath = path.join(os.tmpdir(), `cfg-install-${Date.now()}.sh`);
+  const stagedTmpRoot = path.dirname(path.dirname(stagedAppPath)); // tmpDir
+
+  // Build script as a line-array to keep JS interpolation away from bash
+  // ${...} expansions. Paths are single-quoted with single-quote-escape.
+  const q = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'";
+  const script = [
+    '#!/bin/bash',
+    'set -u',
+    'LOG=/tmp/cfg-install-$$.log',
+    'exec >> "$LOG" 2>&1',
+    'echo "[$(date)] cfg installer starting"',
+    '',
+    `INSTALLED=${q(installedAppPath)}`,
+    `STAGED=${q(stagedAppPath)}`,
+    `TMP_DIR=${q(stagedTmpRoot)}`,
+    `SELF=${q(scriptPath)}`,
+    '',
+    '# Wait for the old app processes to fully exit so file handles release.',
+    'for i in 1 2 3 4 5; do',
+    '  if ! pgrep -f "CFG Invoicing" >/dev/null; then break; fi',
+    '  sleep 1',
+    'done',
+    'pkill -9 -f "CFG Invoicing" 2>/dev/null || true',
+    'sleep 1',
+    '',
+    '# Move the old app out of the way so we can roll back on failure.',
+    'BACKUP="${INSTALLED}.cfg-bak.$$"',
+    'if [ -d "$INSTALLED" ]; then',
+    '  mv "$INSTALLED" "$BACKUP" || { echo "mv old failed"; exit 1; }',
+    'fi',
+    '',
+    '# Copy the staged new app into place.',
+    'if cp -R "$STAGED" "$INSTALLED"; then',
+    '  xattr -dr com.apple.quarantine "$INSTALLED" 2>/dev/null || true',
+    '  ( sleep 8 && rm -rf "$BACKUP" ) &',
+    '  open "$INSTALLED"',
+    'else',
+    '  echo "cp failed — restoring backup"',
+    '  rm -rf "$INSTALLED"',
+    '  mv "$BACKUP" "$INSTALLED"',
+    '  open "$INSTALLED"',
+    '  exit 1',
+    'fi',
+    '',
+    'rm -rf "$TMP_DIR"',
+    'rm -f "$SELF"',
+    'echo "[$(date)] cfg installer done"',
+    '',
+  ].join('\n');
+
+  fs.writeFileSync(scriptPath, script, { mode: 0o755 });
+  console.log(`[updater] launching installer ${scriptPath} → ${installedAppPath}`);
+
+  // Spawn detached so it survives our quit
+  const child = spawn('/bin/bash', [scriptPath], {
+    detached: true,
+    stdio: 'ignore',
+  });
+  child.unref();
+
+  // Give the script a moment to start, then quit ourselves
+  setTimeout(() => app.quit(), 250);
+}
 
 const { generateInvoicePDF, generatePaidPDF, regenerateInvoicePDF, generatePayStub, generateYearEndSummaryPDF } = require('./src/pdf-generator');
 const { sendInvoiceEmail, sendPaidReceipt, sendReminderEmail, testConnection, sendPayStub } = require('./src/mailer');
