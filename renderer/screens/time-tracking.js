@@ -74,8 +74,135 @@ function formatTime(iso) {
   const d = new Date(iso);
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
-function renderTimesheets(body) {
-  body.innerHTML = '<p>Timesheets — Task 11.4</p>';
+async function renderTimesheets(body) {
+  body.innerHTML = '<p>Loading…</p>';
+  const emps = await window.api.timeTracking.listEmployees();
+  if (!emps.length) { body.innerHTML = '<p class="muted">No employees yet.</p>'; return; }
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  body.innerHTML = `
+    <div class="tt-ts-controls">
+      <label>Employee
+        <select id="tt-ts-emp">
+          ${emps.map(e => `<option value="${e.id}">${escapeHtml(e.full_name)}</option>`).join('')}
+        </select>
+      </label>
+      <label>Week of <input id="tt-ts-week" type="date" value="${todayIso}"></label>
+      <button id="tt-ts-load" class="btn-primary">Load</button>
+    </div>
+    <div id="tt-ts-shifts"></div>
+  `;
+
+  const load = async () => {
+    const empId = body.querySelector('#tt-ts-emp').value;
+    const week = body.querySelector('#tt-ts-week').value;
+    const list = body.querySelector('#tt-ts-shifts');
+    list.innerHTML = '<p>Loading…</p>';
+    const shifts = await window.api.timeTracking.listShifts(empId, week);
+    if (!shifts.length) { list.innerHTML = '<p class="muted">No shifts this week.</p>'; return; }
+
+    list.innerHTML = shifts.map(s => `
+      <div class="tt-shift" data-shift-id="${s.id}">
+        <div class="tt-shift-row">
+          <div>${formatDate(s.clock_in_at)}</div>
+          <div>${formatTime(s.clock_in_at)} → ${s.clock_out_at ? formatTime(s.clock_out_at) : '<em>open</em>'}</div>
+          <div>${durationLabel(s.clock_in_at, s.clock_out_at)}</div>
+          <div>${s.clock_in_method}${s.clock_out_method ? ` / ${s.clock_out_method}` : ''}</div>
+          <div>
+            <button data-action="edit">Edit</button>
+            <button data-action="audit">WiFi audit</button>
+          </div>
+        </div>
+        <div class="tt-shift-audit" hidden></div>
+      </div>`).join('');
+
+    list.querySelectorAll('.tt-shift').forEach(card => {
+      const id = card.dataset.shiftId;
+      const shift = shifts.find(x => x.id === id);
+      card.querySelector('[data-action="edit"]').onclick = () => openEditShiftModal(shift, () => load());
+      card.querySelector('[data-action="audit"]').onclick = async () => {
+        const audit = card.querySelector('.tt-shift-audit');
+        if (!audit.hidden) { audit.hidden = true; return; }
+        audit.innerHTML = 'Loading…';
+        audit.hidden = false;
+        const evts = await window.api.timeTracking.listWifiEventsForShift(id);
+        audit.innerHTML = `
+          <ul class="tt-audit-list">
+            ${evts.map(e => `<li><span class="dot ${e.event_type === 'connect' ? 'dot-green' : 'dot-red'}"></span> ${e.event_type} at ${formatTime(e.occurred_at)}</li>`).join('') || '<li class="muted">No WiFi events in this window.</li>'}
+          </ul>`;
+      };
+    });
+  };
+
+  body.querySelector('#tt-ts-load').onclick = load;
+  load();
+}
+
+function formatDate(iso) {
+  return new Date(iso).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+}
+function durationLabel(a, b) {
+  if (!b) return '—';
+  const ms = new Date(b) - new Date(a);
+  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  return `${h}h ${m}m`;
+}
+
+function openEditShiftModal(shift, onSaved) {
+  const m = document.createElement('div');
+  m.className = 'tt-modal';
+  m.innerHTML = `
+    <div class="tt-modal-inner">
+      <h2>Edit Shift</h2>
+      <label>Clock In <input name="in" type="datetime-local" value="${toLocalInput(shift.clock_in_at)}"></label>
+      <label>Clock Out <input name="out" type="datetime-local" value="${shift.clock_out_at ? toLocalInput(shift.clock_out_at) : ''}"></label>
+      <label>Notes <textarea name="notes" rows="3">${escapeHtml(shift.notes || '')}</textarea></label>
+      <div class="tt-modal-actions">
+        <button data-action="cancel">Cancel</button>
+        <button data-action="save" class="btn-primary">Save</button>
+      </div>
+      <p class="tt-modal-error error" hidden></p>
+    </div>`;
+  document.body.appendChild(m);
+  const val = (n) => m.querySelector(`[name="${n}"]`).value;
+  const err = m.querySelector('.tt-modal-error');
+  m.querySelector('[data-action="cancel"]').onclick = () => m.remove();
+  m.querySelector('[data-action="save"]').onclick = async () => {
+    err.hidden = true;
+    try {
+      await window.api.timeTracking.editShift(shift.id, {
+        clockInAt: new Date(val('in')).toISOString(),
+        clockOutAt: val('out') ? new Date(val('out')).toISOString() : null,
+        notes: val('notes'),
+        clockOutMethod: val('out') ? 'admin_edit' : null,
+      }, await getCurrentAdminId());
+      m.remove(); onSaved();
+    } catch (e) { err.textContent = String(e.message || e); err.hidden = false; }
+  };
+}
+
+function toLocalInput(iso) {
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Admin identity — derived from the auth session. The auth status object
+// exposes { signedIn, email, role } but not employeeId, so we look up the
+// employee record by email. Cached per render-cycle.
+let _adminIdCache = null;
+async function getCurrentAdminId() {
+  if (_adminIdCache) return _adminIdCache;
+  const status = await window.api.auth.status();
+  if (!status?.signedIn || !status.email) return null;
+  if (status.employeeId) {
+    _adminIdCache = status.employeeId;
+    return _adminIdCache;
+  }
+  const emps = await window.api.timeTracking.listEmployees();
+  const match = emps.find(e => e.email === status.email);
+  _adminIdCache = match?.id || null;
+  return _adminIdCache;
 }
 async function renderEmployees(body) {
   body.innerHTML = '<p>Loading…</p>';
