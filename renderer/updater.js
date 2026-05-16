@@ -183,37 +183,28 @@ END OF LICENSE.`;
     }, 3000);
   }
 
-  // ─── STEP 2: ToS with scroll-gate + agree checkbox ───────────────────
+  // ─── STEP 2: ToS with agree checkbox ─────────────────────────────────
+  // The scroll-gate was dropped — it was occasionally not unlocking the
+  // checkbox (scroll events on the trackpad sometimes missed the bottom
+  // by < 4px). Box is now enabled from the start.
   function renderTos() {
     clearCycle();
     title.textContent = '📜 The fine print';
-    sub.textContent = 'Scroll to the bottom and tick the box to continue';
+    sub.textContent = 'Scroll through, tick the box, and install';
     body.innerHTML = `
       <div id="updTos">${TOS}</div>
-      <label id="updAgree" class="disabled">
-        <input type="checkbox" id="updAgreeBox" disabled />
+      <label id="updAgree" style="color:#ddd">
+        <input type="checkbox" id="updAgreeBox" />
         I have read, understood, and accept these absurd terms.
       </label>
     `;
-    // Back navigates within the flow (to changelog), NOT a way to escape.
     laterBtn.style.display = '';
     laterBtn.textContent = '← Back';
     nextBtn.textContent = 'Install';
-    nextBtn.disabled = true;
+    nextBtn.disabled = !agreed;
 
-    const tos = body.querySelector('#updTos');
-    const label = body.querySelector('#updAgree');
     const box = body.querySelector('#updAgreeBox');
-
-    tos.addEventListener('scroll', () => {
-      const atBottom = tos.scrollTop + tos.clientHeight >= tos.scrollHeight - 4;
-      if (atBottom && !scrolledToBottom) {
-        scrolledToBottom = true;
-        box.disabled = false;
-        label.classList.remove('disabled');
-        label.style.color = '#ddd';
-      }
-    });
+    box.checked = agreed; // restore state if user came back via "Back"
     box.addEventListener('change', () => {
       agreed = box.checked;
       nextBtn.disabled = !agreed;
