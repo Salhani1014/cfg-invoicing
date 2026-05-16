@@ -168,7 +168,18 @@ export async function invoicesScreen(container) {
     `;
 
     // Wire controls
-    container.querySelector('#invoiceSearch').addEventListener('input', e => { search = e.target.value; render(); });
+    container.querySelector('#invoiceSearch').addEventListener('input', e => {
+      const caret = e.target.selectionStart;
+      search = e.target.value;
+      render();
+      // render() rebuilt the DOM — focus the fresh input and restore caret
+      // so typing feels uninterrupted.
+      const fresh = container.querySelector('#invoiceSearch');
+      if (fresh) {
+        fresh.focus();
+        try { fresh.setSelectionRange(caret, caret); } catch (_) {}
+      }
+    });
     container.querySelectorAll('[data-filter]').forEach(btn => {
       btn.addEventListener('click', () => { filter = btn.dataset.filter; selectedIds.clear(); render(); });
     });

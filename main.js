@@ -37,6 +37,28 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   mainWindow.on('closed', () => { mainWindow = null; });
 
+  // Native right-click context menu — Cut/Copy/Paste/Select All. Each
+  // role is enabled based on the editFlags reported by the renderer
+  // (e.g. Copy is disabled if there's no selection).
+  mainWindow.webContents.on('context-menu', (_e, params) => {
+    const items = [];
+    if (params.isEditable) {
+      items.push(
+        { role: 'cut',  enabled: params.editFlags.canCut  },
+        { role: 'copy', enabled: params.editFlags.canCopy },
+        { role: 'paste', enabled: params.editFlags.canPaste },
+        { type: 'separator' },
+        { role: 'selectAll' },
+      );
+    } else if (params.selectionText && params.selectionText.trim().length > 0) {
+      items.push({ role: 'copy' });
+    } else {
+      items.push({ role: 'selectAll' });
+    }
+    const menu = Menu.buildFromTemplate(items);
+    menu.popup({ window: mainWindow });
+  });
+
   // Re-emit any buffered update-info once the renderer has fully loaded —
   // closes the launch-time race where update checks fired before the
   // renderer's IPC listeners were registered.
