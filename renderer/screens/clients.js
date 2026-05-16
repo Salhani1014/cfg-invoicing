@@ -4,7 +4,7 @@ export async function clientsScreen(container) {
   let searchQuery = '';
 
   const SORTABLE = {
-    name:    { label: 'Name',         get: c => `${c.last_name || ''} ${c.first_name || ''}`.toLowerCase() },
+    name:    { label: 'Name',         get: c => `${c.first_name || ''} ${c.last_name || ''}`.toLowerCase() },
     email:   { label: 'Email',        get: c => (c.email || '').toLowerCase() },
     phone:   { label: 'Phone',        get: c => (c.phone || '').toLowerCase() },
     lastInv: { label: 'Last Invoice', get: c => c.last_invoice_date || '' },
