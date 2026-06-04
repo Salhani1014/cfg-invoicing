@@ -5,3 +5,9 @@ dist/
 !.env.example
 .DS_Store
 *.log
+
+# GitHub PAT bundled for private-repo auto-update (do not commit)
+src/github-token.js
+
+# Superpowers tool internal state
+.superpowers/
